@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6" x-data="{
+    torque: {{ baseline.torque_nm | default(40.0) }},
+    processTemp: {{ baseline.process_temp_k | default(310.0) }},
+    speed: {{ baseline.rotational_speed_rpm | default(1500) }},
+    idleTime: {{ baseline.idle_time_seconds | default(30) }},
+    toolWear: {{ baseline.tool_wear_min | default(10) }},
+    dailyProd: 800,
+    result: null,
+    loading: false,
+    async simulate() {
+        this.loading = true;
+        try {
+            const params = new URLSearchParams({
+                torque: this.torque, 
+                process_temp: this.processTemp,
+                speed: this.speed, 
+                idle_time: this.idleTime,
+                tool_wear: this.toolWear, 
+                daily_production: this.dailyProd
+            });
+            const res = await fetch('/api/simulate?' + params.toString());
+            if (res.ok) {
+                this.result = await res.json();
+            } else {
+                console.error('Simulation failed');
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    }
+}" x-init="simulate()">
+
+    <!-- Header -->
+    <div>
+        <h1 class="text-3xl font-bold text-white mb-2">What-If Lab</h1>
+        <div class="bg-amber-900/30 border border-amber-500/50 rounded-lg p-3 flex items-center">
+            <span class="text-amber-500 mr-2">⚠️</span>
+            <span class="text-amber-200 text-sm">SIMULATION — Results are model-based estimates</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Left Column: Controls -->
+        <div class="bg-[#161b26] border border-[#2a3348] rounded-xl p-6 shadow-lg backdrop-blur-sm">
+            <h2 class="text-xl font-semibold text-white mb-6 flex items-center">
+                <span class="mr-2">🎛️</span> Parameter Controls
+            </h2>
+            
+            <div class="space-y-6">
+                <!-- Torque -->
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <label class="text-gray-300 font-medium">Torque (Nm)</label>
+                        <span class="text-blue-400 font-mono" x-text="torque"></span>
+                    </div>
+                    <input type="range" min="5" max="75" step="0.5" x-model.number="torque" @input.debounce.300ms="simulate()" class="w-full h-2 bg-[#2a3348] rounded-lg appearance-none cursor-pointer accent-[#3dcd58]">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Min: 5</span>
+                        <span>Baseline: {{ baseline.torque_nm | default(40.0) }}</span>
+                        <span>Max: 75</span>
+                    </div>
+                </div>
+
+                <!-- Process Temp -->
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <label class="text-gray-300 font-medium">Process Temperature (K)</label>
+                        <span class="text-blue-400 font-mono" x-text="processTemp"></span>
+                    </div>
+                    <input type="range" min="306" max="314" step="0.1" x-model.number="processTemp" @input.debounce.300ms="simulate()" class="w-full h-2 bg-[#2a3348] rounded-lg appearance-none cursor-pointer accent-[#3dcd58]">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Min: 306</span>
+                        <span>Baseline: {{ baseline.process_temp_k | default(310.0) }}</span>
+                        <span>Max: 314</span>
+                    </div>
+                </div>
+
+                <!-- Rotational Speed -->
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <label class="text-gray-300 font-medium">Rotational Speed (RPM)</label>
+                        <span class="text-blue-400 font-mono" x-text="speed"></span>
+                    </div>
+                    <input type="range" min="1168" max="2886" step="10" x-model.number="speed" @input.debounce.300ms="simulate()" class="w-full h-2 bg-[#2a3348] rounded-lg appearance-none cursor-pointer accent-[#3dcd58]">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Min: 1168</span>
+                        <span>Baseline: {{ baseline.rotational_speed_rpm | default(1500) }}</span>
+                        <span>Max: 2886</span>
+                    </div>
+                </div>
+
+                <!-- Idle Time -->
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <label class="text-gray-300 font-medium">Idle Time (seconds)</label>
+                        <span class="text-blue-400 font-mono" x-text="idleTime"></span>
+                    </div>
+                    <input type="range" min="5" max="120" step="5" x-model.number="idleTime" @input.debounce.300ms="simulate()" class="w-full h-2 bg-[#2a3348] rounded-lg appearance-none cursor-pointer accent-[#3dcd58]">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Min: 5</span>
+                        <span>Baseline: {{ baseline.idle_time_seconds | default(30) }}</span>
+                        <span>Max: 120</span>
+                    </div>
+                </div>
+
+                <!-- Tool Wear -->
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <label class="text-gray-300 font-medium">Tool Wear (minutes)</label>
+                        <span class="text-blue-400 font-mono" x-text="toolWear"></span>
+                    </div>
+                    <input type="range" min="0" max="250" step="5" x-model.number="toolWear" @input.debounce.300ms="simulate()" class="w-full h-2 bg-[#2a3348] rounded-lg appearance-none cursor-pointer accent-[#3dcd58]">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Min: 0</span>
+                        <span>Baseline: {{ baseline.tool_wear_min | default(10) }}</span>
+                        <span>Max: 250</span>
+                    </div>
+                </div>
+
+                <!-- Daily Production -->
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <label class="text-gray-300 font-medium">Daily Production</label>
+                        <span class="text-blue-400 font-mono" x-text="dailyProd"></span>
+                    </div>
+                    <input type="number" min="200" max="2000" x-model.number="dailyProd" @input.debounce.300ms="simulate()" class="w-full bg-[#0f1117] border border-[#2a3348] text-white text-sm rounded-lg focus:ring-[#3dcd58] focus:border-[#3dcd58] block p-2.5">
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Results -->
+        <div class="bg-[#161b26] border border-[#2a3348] rounded-xl p-6 shadow-lg backdrop-blur-sm relative min-h-[400px]">
+            
+            <!-- Loading Overlay -->
+            <div x-show="loading" class="absolute inset-0 bg-[#161b26]/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-10 transition-opacity duration-300">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3dcd58]"></div>
+            </div>
+
+            <h2 class="text-xl font-semibold text-white mb-6 flex items-center">
+                <span class="mr-2">📊</span> Simulation Results
+            </h2>
+
+            <template x-if="result">
+                <div class="space-y-4">
+                    <!-- Metrics Grid -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Energy per Part -->
+                        <div class="bg-[#0f1117] p-4 rounded-lg border border-[#2a3348]">
+                            <div class="text-sm text-gray-400 mb-1">Energy / Part</div>
+                            <div class="text-2xl font-bold text-white" x-text="result.energy_per_part + ' Wh'"></div>
+                            <div class="text-xs mt-2 font-medium" 
+                                 :class="result.energy_change_pct <= 0 ? 'text-[#3dcd58]' : 'text-[#f87171]'">
+                                <span x-text="(result.energy_change_pct > 0 ? '+' : '') + result.energy_change_pct + '%'"></span> vs baseline
+                            </div>
+                        </div>
+
+                        <!-- Daily Energy Change -->
+                        <div class="bg-[#0f1117] p-4 rounded-lg border border-[#2a3348]">
+                            <div class="text-sm text-gray-400 mb-1">Daily Energy Change</div>
+                            <div class="text-2xl font-bold" 
+                                 :class="result.daily_energy_change <= 0 ? 'text-[#3dcd58]' : 'text-[#f87171]'"
+                                 x-text="(result.daily_energy_change > 0 ? '+' : '') + result.daily_energy_change + ' kWh'">
+                            </div>
+                        </div>
+
+                        <!-- Annual Cost Impact -->
+                        <div class="bg-[#0f1117] p-4 rounded-lg border border-[#2a3348]">
+                            <div class="text-sm text-gray-400 mb-1">Annual Cost Impact</div>
+                            <div class="text-2xl font-bold" 
+                                 :class="result.annual_cost_impact <= 0 ? 'text-[#3dcd58]' : 'text-[#f87171]'"
+                                 x-text="(result.annual_cost_impact > 0 ? '+' : '') + '₹' + Math.abs(result.annual_cost_impact).toLocaleString()">
+                            </div>
+                            <div class="text-xs text-gray-500 mt-2">Estimated</div>
+                        </div>
+
+                        <!-- Annual CO2 Impact -->
+                        <div class="bg-[#0f1117] p-4 rounded-lg border border-[#2a3348]">
+                            <div class="text-sm text-gray-400 mb-1">Annual CO₂ Impact</div>
+                            <div class="text-2xl font-bold" 
+                                 :class="result.annual_co2_impact <= 0 ? 'text-[#3dcd58]' : 'text-[#f87171]'"
+                                 x-text="(result.annual_co2_impact > 0 ? '+' : '') + result.annual_co2_impact + ' kg'">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Warnings -->
+                    <template x-if="result.warnings && result.warnings.length > 0">
+                        <div class="mt-4 bg-[#f87171]/10 border border-[#f87171]/30 rounded-lg p-3">
+                            <h4 class="text-[#f87171] text-sm font-semibold mb-2">⚠️ Process Warnings</h4>
+                            <ul class="list-disc pl-5 text-sm text-[#f87171]/80 space-y-1">
+                                <template x-for="warning in result.warnings">
+                                    <li x-text="warning"></li>
+                                </template>
+                            </ul>
+                        </div>
+                    </template>
+
+                    <!-- Confidence -->
+                    <div class="mt-4 flex justify-between items-center text-sm border-t border-[#2a3348] pt-4">
+                        <span class="text-gray-400">Model Confidence</span>
+                        <div class="flex items-center">
+                            <span class="text-white font-medium mr-2" x-text="result.confidence_score + '%'"></span>
+                            <div class="w-24 h-2 bg-[#2a3348] rounded-full overflow-hidden">
+                                <div class="h-full bg-blue-500" :style="`width: ${result.confidence_score}%`"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+{% endblock %}

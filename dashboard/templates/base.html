@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}EcoTwin{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50:'#f0fdf4',100:'#dcfce7',200:'#bbf7d0',300:'#86efac',400:'#4ade80',500:'#22c55e',600:'#16a34a',700:'#15803d',800:'#166534',900:'#14532d' },
+                        surface: { DEFAULT:'#0f1117', card:'#161b26', hover:'#1e2536', border:'#2a3348' },
+                        schneider: { green:'#3dcd58', dark:'#009530' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        .glass { background: rgba(22,27,38,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(42,51,72,0.6); }
+        .glow-green { box-shadow: 0 0 20px rgba(61,205,88,0.15); }
+        .kpi-ring { background: conic-gradient(#3dcd58 calc(var(--pct) * 1%), #2a3348 0); }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f1117; }
+        ::-webkit-scrollbar-thumb { background: #2a3348; border-radius: 3px; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-surface text-gray-200 min-h-screen">
+
+<!-- Navigation -->
+<nav class="fixed top-0 left-0 h-screen w-64 glass border-r border-surface-border z-50 flex flex-col">
+    <div class="p-6 border-b border-surface-border">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-schneider-green/20 flex items-center justify-center">
+                <span class="text-xl">⚡</span>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white tracking-tight">EcoTwin</h1>
+                <p class="text-xs text-gray-500">Energy Intelligence</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 py-4 px-3 space-y-1">
+        <a href="/"
+           class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 
+                  {% if page == 'overview' %}bg-schneider-green/15 text-schneider-green{% else %}text-gray-400 hover:bg-surface-hover hover:text-white{% endif %}">
+            <span class="text-lg">🏭</span>
+            <span class="text-sm font-medium">Factory Overview</span>
+        </a>
+        
+        <div class="pt-2 pb-1 px-4">
+            <span class="text-xs text-gray-600 uppercase tracking-wider font-semibold">Machines</span>
+        </div>
+        {% for mid in ['M-01','M-02','M-03','M-04'] %}
+        <a href="/machine/{{ mid }}"
+           class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 
+                  {% if page == 'machine' and machine_id is defined and machine_id == mid %}bg-schneider-green/15 text-schneider-green{% else %}text-gray-400 hover:bg-surface-hover hover:text-white{% endif %}">
+            <span class="text-sm">⚙️</span>
+            <span class="text-sm">{{ mid }}</span>
+        </a>
+        {% endfor %}
+        
+        <div class="pt-3"></div>
+        
+        <a href="/whatif"
+           class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 
+                  {% if page == 'whatif' %}bg-schneider-green/15 text-schneider-green{% else %}text-gray-400 hover:bg-surface-hover hover:text-white{% endif %}">
+            <span class="text-lg">🧪</span>
+            <span class="text-sm font-medium">What-If Lab</span>
+        </a>
+        
+        <a href="/recommendations"
+           class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 
+                  {% if page == 'recommendations' %}bg-schneider-green/15 text-schneider-green{% else %}text-gray-400 hover:bg-surface-hover hover:text-white{% endif %}">
+            <span class="text-lg">📋</span>
+            <span class="text-sm font-medium">Recommendations</span>
+        </a>
+    </div>
+
+    <div class="p-4 border-t border-surface-border">
+        <div class="flex items-center gap-2 text-xs text-gray-600">
+            <span class="w-2 h-2 rounded-full bg-schneider-green pulse-dot"></span>
+            <span>System Online</span>
+        </div>
+        <p class="text-xs text-gray-700 mt-2">Schneider Electric<br>Yuva Yodha 2026</p>
+    </div>
+</nav>
+
+<!-- Main Content -->
+<main class="ml-64 p-8 min-h-screen">
+    {% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

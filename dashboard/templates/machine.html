@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="fade-in space-y-6" x-data="{ selectedMachine: '{{ machine_id }}' }">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-white">Machine Deep-Dive</h1>
+        <select x-model="selectedMachine" @change="window.location.href='?machine_id=' + selectedMachine" 
+                class="bg-[#161b26] border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+            {% for m in machines %}
+            <option value="{{ m }}" {% if m == machine_id %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <!-- 4 KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Avg SEC (kWh/part)</h3>
+            <p class="text-2xl font-bold text-white mt-2">{{ avg_sec|round(2) }}</p>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Avg Deviation</h3>
+            <p class="text-2xl font-bold {% if avg_deviation > 10 %}text-[#f87171]{% else %}text-[#3dcd58]{% endif %} mt-2">{{ avg_deviation|round(1) }}%</p>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Anomalies Detected</h3>
+            <p class="text-2xl font-bold text-[#f59e0b] mt-2">{{ anomaly_count }}</p>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Maintenance Status</h3>
+            <p class="text-xl font-bold {% if maintenance_status == 'Critical' %}text-[#f87171]{% elif maintenance_status == 'Warning' %}text-[#f59e0b]{% else %}text-[#3dcd58]{% endif %} mt-2">
+                {{ maintenance_status }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Timeline Chart -->
+    <div class="glass p-4 rounded-xl fade-in">
+        <h3 class="text-gray-300 font-semibold mb-4">Energy Consumption Timeline</h3>
+        <div id="chart-timeline" style="height: 350px;"></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 fade-in">
+        <!-- Feature Analysis Table -->
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-300 font-semibold mb-4">Process Parameters</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-gray-400">
+                    <thead class="text-xs text-gray-300 uppercase bg-[#161b26]">
+                        <tr>
+                            <th class="px-4 py-3 rounded-tl-lg">Parameter</th>
+                            <th class="px-4 py-3">Value</th>
+                            <th class="px-4 py-3 rounded-tr-lg">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in features_table %}
+                        <tr class="border-b border-gray-700">
+                            <td class="px-4 py-3 font-medium text-white">{{ f.name }}</td>
+                            <td class="px-4 py-3">{{ f.value }}</td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-1 text-xs rounded 
+                                    {% if f.status == 'normal' %}bg-green-900 text-green-300
+                                    {% elif f.status == 'moderate' %}bg-yellow-900 text-yellow-300
+                                    {% else %}bg-red-900 text-red-300{% endif %}">
+                                    {{ f.status|title }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Deviation Hist -->
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-300 font-semibold mb-4">Deviation Distribution</h3>
+            <div id="chart-deviation-hist" style="height: 350px;"></div>
+        </div>
+    </div>
+
+    <!-- Anomalies Table -->
+    <div class="glass p-4 rounded-xl fade-in">
+        <h3 class="text-gray-300 font-semibold mb-4">Recent Anomalies</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left text-gray-400">
+                <thead class="text-xs text-gray-300 uppercase bg-[#161b26]">
+                    <tr>
+                        <th class="px-4 py-3 rounded-tl-lg">Time</th>
+                        <th class="px-4 py-3">Actual (kWh)</th>
+                        <th class="px-4 py-3">Expected (kWh)</th>
+                        <th class="px-4 py-3">Deviation</th>
+                        <th class="px-4 py-3">Torque (Nm)</th>
+                        <th class="px-4 py-3">Tool Wear (min)</th>
+                        <th class="px-4 py-3 rounded-tr-lg">Severity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in anomaly_table %}
+                    <tr class="border-b border-gray-700 hover:bg-[#161b26]">
+                        <td class="px-4 py-3 text-white">{{ a.timestamp }}</td>
+                        <td class="px-4 py-3">{{ a.actual|round(2) }}</td>
+                        <td class="px-4 py-3">{{ a.predicted|round(2) }}</td>
+                        <td class="px-4 py-3">{{ a.deviation|round(1) }}%</td>
+                        <td class="px-4 py-3">{{ a.torque }}</td>
+                        <td class="px-4 py-3">{{ a.tool_wear }}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs rounded 
+                                {% if a.severity == 'High' %}bg-red-900 text-red-300
+                                {% elif a.severity == 'Medium' %}bg-yellow-900 text-yellow-300
+                                {% else %}bg-blue-900 text-blue-300{% endif %}">
+                                {{ a.severity }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="px-4 py-4 text-center">No anomalies found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const layoutDefaults = {
+        paper_bgcolor: '#0f1117',
+        plot_bgcolor: '#161b26',
+        font: { color: '#9ca3af' },
+        margin: { t: 30, l: 50, r: 20, b: 40 }
+    };
+
+    // Timeline Chart
+    const tlData = JSON.parse('{{ timeline|safe }}');
+    const normalX = [], normalY = [];
+    const anomalyX = [], anomalyY = [];
+    
+    for(let i=0; i<tlData.timestamps.length; i++) {
+        if(tlData.is_anomaly[i]) {
+            anomalyX.push(tlData.timestamps[i]);
+            anomalyY.push(tlData.actual[i]);
+        } else {
+            normalX.push(tlData.timestamps[i]);
+            normalY.push(tlData.actual[i]);
+        }
+    }
+
+    Plotly.newPlot('chart-timeline', [
+        {
+            x: normalX,
+            y: normalY,
+            name: 'Normal',
+            type: 'scatter',
+            mode: 'markers',
+            marker: { color: '#60a5fa', size: 6 }
+        },
+        {
+            x: anomalyX,
+            y: anomalyY,
+            name: 'Anomaly',
+            type: 'scatter',
+            mode: 'markers',
+            marker: { color: '#f87171', size: 10, symbol: 'x' }
+        },
+        {
+            x: tlData.timestamps,
+            y: tlData.predicted,
+            name: 'Expected',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#3dcd58', dash: 'dash', width: 2 }
+        }
+    ], {
+        ...layoutDefaults,
+        xaxis: { title: 'Time', gridcolor: '#1f2937' },
+        yaxis: { title: 'Energy', gridcolor: '#1f2937' },
+        legend: { orientation: 'h', y: -0.2 }
+    });
+
+    // Deviation Histogram
+    const histData = JSON.parse('{{ deviation_hist|safe }}');
+    Plotly.newPlot('chart-deviation-hist', [{
+        x: histData.bins,
+        y: histData.counts,
+        type: 'bar',
+        marker: { color: '#60a5fa' }
+    }], {
+        ...layoutDefaults,
+        xaxis: { title: 'Deviation (%)', gridcolor: '#1f2937' },
+        yaxis: { title: 'Count', gridcolor: '#1f2937' }
+    });
+</script>
+{% endblock %}

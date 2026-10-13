@@ -1,0 +1,31 @@
+# EcoTwin - Intelligent Energy & Process Optimization
+# Requirements for Yuva Yodha Energy Tech Hackathon 2026
+
+# Core Data Science
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Gradient Boosting
+xgboost>=2.0.0
+lightgbm>=4.0.0
+
+# Explainability
+shap>=0.43.0
+
+# Visualization
+plotly>=5.18.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
+
+# Web Framework (FastAPI + Jinja2)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+jinja2>=3.1.0
+python-multipart>=0.0.6
+
+# Utilities
+joblib>=1.3.0
+
+# Testing
+pytest>=7.4.0

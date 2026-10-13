@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="fade-in space-y-6" x-data="{ }">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-white">Factory Overview</h1>
+    </div>
+
+    <!-- 5 KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="glass p-4 rounded-xl flex flex-col justify-center items-center">
+            <h3 class="text-gray-400 text-sm font-semibold mb-2">Efficiency Score</h3>
+            <div id="chart-efficiency" style="width: 100px; height: 100px;"></div>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Avg SEC (kWh/part)</h3>
+            <p class="text-2xl font-bold text-white mt-2">{{ avg_sec|round(2) }}</p>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Total Energy (kWh)</h3>
+            <p class="text-2xl font-bold text-[#60a5fa] mt-2">{{ total_energy|round(2) }}</p>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Anomalies Detected</h3>
+            <p class="text-2xl font-bold text-[#f87171] mt-2">{{ anomaly_count }}</p>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-400 text-sm font-semibold">Est. CO2 (Tonnes)</h3>
+            <p class="text-2xl font-bold text-[#3dcd58] mt-2">{{ co2_tonnes|round(2) }}</p>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 fade-in">
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-300 font-semibold mb-4">Energy Consumption: Actual vs Expected</h3>
+            <div id="chart-daily-energy" style="height: 350px;"></div>
+            <!-- Alias for testing -->
+            <div id="chart-energy-trend" style="display:none;"></div>
+        </div>
+        <div class="glass p-4 rounded-xl">
+            <h3 class="text-gray-300 font-semibold mb-4">Machine Efficiency</h3>
+            <div id="chart-machine-perf" style="height: 350px;"></div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in">
+        <!-- Active Alerts -->
+        <div class="glass p-4 rounded-xl lg:col-span-1">
+            <h3 class="text-gray-300 font-semibold mb-4">Active Alerts</h3>
+            <div class="space-y-3 max-h-80 overflow-y-auto">
+                {% for alert in alerts %}
+                <div class="border-l-4 p-3 bg-[#161b26] rounded-r-lg {% if alert.avg_deviation > 15 %}border-[#f87171]{% else %}border-[#f59e0b]{% endif %}">
+                    <div class="flex justify-between items-start">
+                        <span class="font-bold text-white">{{ alert.machine_id }}</span>
+                        <span class="text-xs px-2 py-1 rounded bg-[#0f1117] text-gray-300">{{ alert.count }} anomalies</span>
+                    </div>
+                    <p class="text-sm text-gray-400 mt-1">Dev: {{ alert.avg_deviation|round(1) }}%</p>
+                    <p class="text-sm text-[#3dcd58] mt-1">Save: ₹{{ alert.potential_saving_inr }}</p>
+                </div>
+                {% else %}
+                <p class="text-gray-400">No active alerts.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- SEC by Product Type -->
+        <div class="glass p-4 rounded-xl lg:col-span-2">
+            <h3 class="text-gray-300 font-semibold mb-4">SEC by Product Type</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {% for prod_type, data in product_sec.items() %}
+                <div class="bg-[#161b26] p-4 rounded-lg text-center">
+                    <h4 class="text-lg font-bold text-[#60a5fa]">{{ prod_type }}</h4>
+                    <p class="text-sm text-gray-400 mt-1">Avg SEC: <span class="text-white">{{ data.avg_sec|round(2) }}</span></p>
+                    <p class="text-sm text-gray-400">Dev: <span class="{% if data.avg_deviation > 10 %}text-[#f87171]{% else %}text-[#3dcd58]{% endif %}">{{ data.avg_deviation|round(1) }}%</span></p>
+                    <p class="text-xs text-gray-500 mt-2">{{ data.count }} parts produced</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const layoutDefaults = {
+        paper_bgcolor: '#0f1117',
+        plot_bgcolor: '#161b26',
+        font: { color: '#9ca3af' },
+        margin: { t: 30, l: 50, r: 20, b: 40 }
+    };
+
+    // Efficiency Gauge
+    Plotly.newPlot('chart-efficiency', [{
+        type: "indicator",
+        mode: "gauge+number",
+        value: {{ efficiency_score }},
+        gauge: {
+            axis: { range: [null, 100], tickwidth: 1, tickcolor: "#9ca3af" },
+            bar: { color: "#3dcd58" },
+            bgcolor: "#0f1117",
+            borderwidth: 2,
+            bordercolor: "#161b26",
+            steps: [
+                { range: [0, 50], color: "#451a1e" },
+                { range: [50, 80], color: "#45320e" },
+                { range: [80, 100], color: "#14331d" }
+            ]
+        }
+    }], {
+        paper_bgcolor: '#0f1117',
+        plot_bgcolor: '#0f1117',
+        font: { color: '#fff', size: 12 },
+        margin: { t: 10, b: 10, l: 10, r: 10 }
+    });
+
+    // Daily Energy Chart
+    const dailyData = JSON.parse('{{ daily_chart|safe }}');
+    Plotly.newPlot('chart-daily-energy', [
+        {
+            x: dailyData.dates,
+            y: dailyData.actual,
+            name: 'Actual',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: { color: '#60a5fa' }
+        },
+        {
+            x: dailyData.dates,
+            y: dailyData.predicted,
+            name: 'Expected',
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#3dcd58', dash: 'dash' }
+        }
+    ], {
+        ...layoutDefaults,
+        xaxis: { title: 'Date', gridcolor: '#1f2937' },
+        yaxis: { title: 'Energy (kWh)', gridcolor: '#1f2937' },
+        legend: { orientation: 'h', y: -0.2 }
+    });
+
+    // Machine Perf Chart
+    const machinePerf = JSON.parse('{{ machine_perf|tojson|safe }}');
+    const mIds = machinePerf.map(m => m.id);
+    const mEff = machinePerf.map(m => m.efficiency);
+    Plotly.newPlot('chart-machine-perf', [{
+        x: mEff,
+        y: mIds,
+        type: 'bar',
+        orientation: 'h',
+        marker: {
+            color: mEff.map(e => e > 85 ? '#3dcd58' : (e > 70 ? '#f59e0b' : '#f87171'))
+        }
+    }], {
+        ...layoutDefaults,
+        xaxis: { title: 'Efficiency (%)', range: [0, 100], gridcolor: '#1f2937' },
+        yaxis: { automargin: true }
+    });
+</script>
+{% endblock %}
