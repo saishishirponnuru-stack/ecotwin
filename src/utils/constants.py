@@ -257,3 +257,63 @@ AI4I_COLUMN_MAPPING: Final[Dict[str, str]] = {
     "OSF": "failure_osf",
     "RNF": "failure_rnf",
 }
+
+# ==============================================================================
+# 9. DATA PROVENANCE TIERS (5-TIER HIERARCHY)
+# ==============================================================================
+TIER_1_SENSOR_MEASUREMENT: Final[str] = "TIER_1_SENSOR_MEASUREMENT"
+TIER_2_PHYSICALLY_DERIVED: Final[str] = "TIER_2_PHYSICALLY_DERIVED"
+TIER_3_CALIBRATED_CONTEXT: Final[str] = "TIER_3_CALIBRATED_CONTEXT"
+TIER_4_MODEL_OUTPUT: Final[str] = "TIER_4_MODEL_OUTPUT"
+TIER_5_SIMULATION_RESULT: Final[str] = "TIER_5_SIMULATION_RESULT"
+
+DATA_TIER_DESCRIPTIONS: Final[Dict[str, str]] = {
+    TIER_1_SENSOR_MEASUREMENT: "Direct empirical telemetry from physical sensors or verified benchmark datasets (no derivations).",
+    TIER_2_PHYSICALLY_DERIVED: "Quantities derived using deterministic electro-mechanical engineering formulas (e.g., P = tau * omega / eta).",
+    TIER_3_CALIBRATED_CONTEXT: "Operational factory context synthesized for demonstration (e.g., timestamps, machine IDs, shift schedules).",
+    TIER_4_MODEL_OUTPUT: "Machine learning or statistical baseline estimates (e.g., predicted energy, residual Z-scores, SHAP values).",
+    TIER_5_SIMULATION_RESULT: "Projected impacts under user-modified operating scenarios constrained by physical boundaries.",
+}
+
+COLUMN_DATA_TIERS: Final[Dict[str, str]] = {
+    # Tier 1: Original sensor values
+    "rotational_speed_rpm": TIER_1_SENSOR_MEASUREMENT,
+    "torque_nm": TIER_1_SENSOR_MEASUREMENT,
+    "tool_wear_min": TIER_1_SENSOR_MEASUREMENT,
+    "air_temp_k": TIER_1_SENSOR_MEASUREMENT,
+    "process_temp_k": TIER_1_SENSOR_MEASUREMENT,
+    "machine_failure": TIER_1_SENSOR_MEASUREMENT,
+    "twf": TIER_1_SENSOR_MEASUREMENT,
+    "hdf": TIER_1_SENSOR_MEASUREMENT,
+    "pwf": TIER_1_SENSOR_MEASUREMENT,
+    "osf": TIER_1_SENSOR_MEASUREMENT,
+    "rnf": TIER_1_SENSOR_MEASUREMENT,
+    "product_type": TIER_1_SENSOR_MEASUREMENT,
+    "product_id": TIER_1_SENSOR_MEASUREMENT,
+    "udi": TIER_1_SENSOR_MEASUREMENT,
+    # Tier 2: Physically derived
+    "power_watts": TIER_2_PHYSICALLY_DERIVED,
+    "mechanical_power_watts": TIER_2_PHYSICALLY_DERIVED,
+    "electrical_power_watts": TIER_2_PHYSICALLY_DERIVED,
+    "cycle_time_minutes": TIER_2_PHYSICALLY_DERIVED,
+    "energy_kwh": TIER_2_PHYSICALLY_DERIVED,
+    "sec_kwh_per_part": TIER_2_PHYSICALLY_DERIVED,
+    # Tier 3: Calibrated context
+    "machine_id": TIER_3_CALIBRATED_CONTEXT,
+    "timestamp": TIER_3_CALIBRATED_CONTEXT,
+    "shift": TIER_3_CALIBRATED_CONTEXT,
+    "maintenance_status": TIER_3_CALIBRATED_CONTEXT,
+    "maintenance_days_since": TIER_3_CALIBRATED_CONTEXT,
+    "electricity_tariff": TIER_3_CALIBRATED_CONTEXT,
+    "idle_time_seconds": TIER_3_CALIBRATED_CONTEXT,
+    "ambient_temperature": TIER_3_CALIBRATED_CONTEXT,
+    "production_batch_id": TIER_3_CALIBRATED_CONTEXT,
+    # Tier 4: Model outputs
+    "predicted_kwh": TIER_4_MODEL_OUTPUT,
+    "residual_kwh": TIER_4_MODEL_OUTPUT,
+    "deviation_pct": TIER_4_MODEL_OUTPUT,
+    "z_score": TIER_4_MODEL_OUTPUT,
+    "is_anomaly": TIER_4_MODEL_OUTPUT,
+    "severity": TIER_4_MODEL_OUTPUT,
+}
+

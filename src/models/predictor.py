@@ -80,6 +80,39 @@ class ModelMetrics:
         )
 
 
+class AnalyticalEnergyBaseline:
+    """
+    First-principles physical energy baseline.
+    
+    Computes theoretical electrical energy directly from kinematics and motor physics
+    with ZERO training parameters:
+        P_mech = Torque * (Speed * 2 * pi / 60)
+        P_elec = P_mech / motor_efficiency
+        Energy = (P_elec * (cycle_time / 60)) / 1000
+    """
+    def __init__(self, motor_efficiency: float = 0.85):
+        self.motor_efficiency = motor_efficiency
+        self.model_type = "analytical_physics"
+        self.is_fitted = True
+        self.feature_names = ['torque_nm', 'rotational_speed_rpm', 'cycle_time_minutes']
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Compute expected baseline energy from physical kinematics."""
+        torque = X['torque_nm'] if 'torque_nm' in X.columns else X['Torque [Nm]']
+        speed = X['rotational_speed_rpm'] if 'rotational_speed_rpm' in X.columns else X['Rotational speed [rpm]']
+        if 'cycle_time_minutes' in X.columns:
+            ct = X['cycle_time_minutes']
+        elif 'product_type' in X.columns:
+            ct = X['product_type'].map({'L': 1.5, 'M': 3.0, 'H': 5.0}).fillna(3.0)
+        else:
+            ct = 3.0
+
+        p_mech = torque * (speed * 2.0 * np.pi / 60.0)
+        p_elec = p_mech / self.motor_efficiency
+        energy = (p_elec * (ct / 60.0)) / 1000.0
+        return np.maximum(np.array(energy), 0.0)
+
+
 class EnergyPredictor:
     """
     Predicts expected energy consumption per manufactured part.
@@ -94,7 +127,20 @@ class EnergyPredictor:
         metrics = predictor.evaluate(X_test, y_test)
     """
 
-    # Features used for energy prediction (order matters for SHAP)
+    # Non-leaky operational features (excludes analytical target components: power_watts and cycle_time_minutes)
+    NON_LEAKY_FEATURES = [
+        'rotational_speed_rpm',
+        'torque_nm',
+        'tool_wear_min',
+        'air_temp_k',
+        'process_temp_k',
+        'product_type_encoded',
+        'shift_encoded',
+        'maintenance_days_since',
+        'ambient_temperature',
+    ]
+
+    # Legacy default features (kept for backward compatibility with existing saved artifacts)
     DEFAULT_FEATURES = [
         'power_watts',
         'rotational_speed_rpm',
@@ -111,6 +157,7 @@ class EnergyPredictor:
     ]
 
     TARGET = 'energy_kwh'
+
 
     def __init__(self, model_type: str = 'xgboost', random_state: int = 42):
         """
