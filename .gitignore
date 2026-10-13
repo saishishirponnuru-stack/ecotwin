@@ -22,6 +22,12 @@ dist/
 .env
 .env.local
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
 # OS files
 .DS_Store
 Thumbs.db
+

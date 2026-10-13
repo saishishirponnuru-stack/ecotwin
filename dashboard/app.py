@@ -25,17 +25,23 @@ from src.models.predictor import EnergyPredictor
 from src.optimization.impact import ImpactCalculator
 from src.optimization.recommender import RecommendationEngine
 from src.utils.constants import GRID_EMISSION_FACTOR, BASE_TARIFF_INR, MACHINE_IDS
+from src.api.v1 import api_v1_router
+from src.db.database import init_db
 
 # ─── FastAPI App ─────────────────────────────────────────────────────────────
 app = FastAPI(
     title="EcoTwin API",
     description="Industrial Energy Intelligence REST API",
-    version="0.1.0",
+    version="0.2.0",
 )
+
+# Mount REST API v1 routers
+app.include_router(api_v1_router)
 
 DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(DASHBOARD_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(DASHBOARD_DIR, "templates"))
+
 
 
 # ─── Data & Model Loading ────────────────────────────────────────────────────
