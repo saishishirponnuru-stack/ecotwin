@@ -2,9 +2,10 @@
 Pydantic v2 schemas for EcoTwin API.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
+from math import isfinite
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ─── Health ──────────────────────────────────────────────────────────────────
@@ -44,10 +45,11 @@ class ExecutiveOverviewResponse(BaseModel):
     total_anomalies: int
     facility_health_score: float
     est_co2_tonnes: float
-    est_wasted_cost_inr: float
+    cost_inr: Optional[float] = None
+    co2_tonnes: Optional[float] = None
     fleet_summary: List[MachineOverviewItem]
     daily_trend: List[DailyTrendItem]
-    tariff_inr_per_kwh: float
+    est_wasted_cost_inr: Optional[float] = None
     grid_emission_factor_kg_per_kwh: float
     data_provenance: str = "TIER_2_PHYSICALLY_DERIVED with TIER_3_CALIBRATED_CONTEXT"
 
@@ -106,6 +108,20 @@ class AnomalyResolveRequest(BaseModel):
     resolution_notes: Optional[str] = "Resolved by operator"
 
 
+class DemoDataResetRequest(BaseModel):
+    confirm: Literal[True] = Field(..., description="Explicit user confirmation is required")
+
+
+class DemoDataResetResponse(BaseModel):
+    status: Literal["success"] = "success"
+    updated_count: int
+    total_demo_anomalies: int
+    open_demo_anomalies: int
+    resolved_demo_anomalies: int
+    backup_file: Optional[str] = None
+    message: str
+
+
 # ─── What-If Simulation ──────────────────────────────────────────────────────
 class WhatIfRequest(BaseModel):
     machine_id: str = Field(..., description="Target machine (e.g. 'M-02')")
@@ -113,8 +129,15 @@ class WhatIfRequest(BaseModel):
     torque_nm: Optional[float] = Field(None, ge=1, le=120, description="Modified spindle torque")
     tool_replacement: Optional[bool] = Field(False, description="Simulate replacing worn cutting tool")
     idle_cutoff_seconds: Optional[float] = Field(None, ge=0, le=120, description="Optimized idle standby delay")
-    shift_reschedule: Optional[str] = Field(None, description="Reschedule batch to 'Day', 'Evening', or 'Night'")
+    shift_reschedule: Optional[Literal["Day", "Evening", "Night"]] = Field(None, description="Reschedule batch to Day, Evening, or Night")
     daily_production: Optional[int] = Field(800, ge=1, le=5000, description="Parts per day")
+
+    @field_validator("spindle_speed_rpm", "torque_nm", "idle_cutoff_seconds")
+    @classmethod
+    def finite_operating_value(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None and not isfinite(value):
+            raise ValueError("Operating values must be finite")
+        return value
 
 
 class WhatIfResponse(BaseModel):
@@ -158,3 +181,20 @@ class ConfigItem(BaseModel):
 
 class ConfigUpdateRequest(BaseModel):
     settings: Dict[str, str] = Field(..., description="Dictionary of key-value settings to update")
+
+# ─── Recommendations ────────────────────────────────────────────────────────
+class RecommendationItem(BaseModel):
+    id: int = Field(..., description="Unique recommendation identifier")
+    machine_id: Optional[str] = Field(None, description="Target machine, if applicable")
+    category: str = Field(..., description="High‑level category (e.g., Efficiency, Maintenance)")
+    action: str = Field(..., description="Suggested concrete action for the operator")
+    reason: str = Field(..., description="Why this recommendation is made, referencing data sources")
+    expected_benefit: Dict[str, Any] = Field(..., description="Estimated impact, e.g., {'energy_kwh': 10.5, 'cost_inr': 250}")
+    difficulty: str = Field(..., description="Operational difficulty (Low/Medium/High)")
+    evidence_source: str = Field(..., description="Origin of evidence, e.g., telemetry, anomaly")
+    evidence_summary: str = Field(..., description="Observed rule trigger and sample size; not a predictive confidence score")
+    provenance: str = Field(..., description="Data provenance tier for this recommendation")
+    assumptions: Optional[str] = Field(None, description="Assumptions underpinning the estimate")
+
+class RecommendationListResponse(BaseModel):
+    recommendations: List[RecommendationItem]

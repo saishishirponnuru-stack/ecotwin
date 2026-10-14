@@ -17,13 +17,14 @@ router = APIRouter(tags=["Anomalies"])
 def list_anomalies(
     machine_id: Optional[str] = Query(None, description="Filter by machine ID"),
     severity: Optional[str] = Query(None, description="Filter by severity ('watch', 'warning', 'critical')"),
+    is_resolved: Optional[bool] = Query(None, description="Filter by operator resolution status"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     """List logged statistical energy anomalies and diagnostic reason codes."""
     return AnomalyService.get_anomalies(
-        db, machine_id=machine_id, severity=severity, limit=limit, offset=offset
+        db, machine_id=machine_id, severity=severity, is_resolved=is_resolved, limit=limit, offset=offset
     )
 
 

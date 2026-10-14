@@ -14,6 +14,7 @@ class AnomalyService:
         db: Session,
         machine_id: Optional[str] = None,
         severity: Optional[str] = None,
+        is_resolved: Optional[bool] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> Dict[str, Any]:
@@ -23,6 +24,8 @@ class AnomalyService:
             query = query.filter(AnomalyEvent.machine_id == machine_id)
         if severity:
             query = query.filter(AnomalyEvent.severity == severity)
+        if is_resolved is not None:
+            query = query.filter(AnomalyEvent.is_resolved == is_resolved)
 
         total_count = query.count()
         critical_count = query.filter(AnomalyEvent.severity == "critical").count()

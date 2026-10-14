@@ -11,6 +11,9 @@ from src.api.v1.telemetry import router as telemetry_router
 from src.api.v1.anomalies import router as anomalies_router
 from src.api.v1.whatif import router as whatif_router
 from src.api.v1.config import router as config_router
+from src.api.v1.energy import router as energy_router
+from src.api.v1.recommendations import router as recommendations_router
+from src.api.v1.demo_data import router as demo_data_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 
@@ -21,5 +24,8 @@ api_v1_router.include_router(telemetry_router)
 api_v1_router.include_router(anomalies_router)
 api_v1_router.include_router(whatif_router)
 api_v1_router.include_router(config_router)
+api_v1_router.include_router(energy_router)
+api_v1_router.include_router(recommendations_router)
+api_v1_router.include_router(demo_data_router)
 
 __all__ = ["api_v1_router"]

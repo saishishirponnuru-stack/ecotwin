@@ -38,9 +38,26 @@ app = FastAPI(
 # Mount REST API v1 routers
 app.include_router(api_v1_router)
 
+# Enable CORS for local frontend development
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(DASHBOARD_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(DASHBOARD_DIR, "templates"))
+
 
 
 
@@ -365,3 +382,186 @@ async def health():
         "dataset_rows": len(DF),
         "features": len(FEATURES),
     }
+
+# ─── API Routes (JSON) ──────────────────────────────────────────────────────
+
+@app.get("/api/v1/overview")
+async def api_overview():
+    """JSON overview endpoint for the React frontend.
+    Mirrors the data passed to the HTML overview template.
+    Returns fields matching `OverviewResponse` TypeScript interface.
+    """
+    # Core KPI calculations (same as HTML route)
+    avg_sec = float(DF["sec_kwh_per_part"].mean())
+    total_energy = float(DF["energy_kwh"].sum())
+    anomaly_count = int(DF["is_anomaly"].sum())
+    normal_pct = float((DF["severity"] == "normal").mean() * 100)
+    efficiency_score = int(min(normal_pct, 99))
+    co2_tonnes = total_energy * GRID_EMISSION_FACTOR / 1000
+
+    # Machine performance (fleet summary)
+    fleet_summary = []
+    for mid in MACHINE_IDS:
+        mdata = DF[DF["machine_id"] == mid]
+        avg_dev = float(mdata["deviation_pct"].mean())
+        eff = max(0, min(100, 100 - abs(avg_dev)))
+        anom = int(mdata["is_anomaly"].sum())
+        fleet_summary.append({
+            "id": mid,
+            "name": f"Machine {mid}",
+            "status": "active",
+            "efficiency_score": round(eff, 1),
+            "avg_sec": round(float(mdata["sec_kwh_per_part"].mean()), 4),
+            "total_anomalies": anom,
+            "avg_deviation_pct": round(avg_dev, 1),
+            "provenance_tier": "tier2",
+        })
+
+    # Daily energy trend (convert to list of objects as expected by frontend)
+    daily = DF.groupby(DF["timestamp"].dt.date).agg(
+        actual=("energy_kwh", "sum"), predicted=("predicted_kwh", "sum")
+    ).reset_index()
+    daily_trend = []
+    for _, row in daily.iterrows():
+        actual_val = round(row["actual"], 2)
+        pred_val = round(row["predicted"], 2)
+        daily_trend.append({
+            "date": str(row["timestamp"]),
+            "actual_kwh": actual_val,
+            "baseline_kwh": pred_val,
+            "savings_opportunity_kwh": max(0, pred_val - actual_val),
+        })
+
+    # Product SEC (legacy, kept for compatibility)
+    product_sec = {}
+    for pt in ["L", "M", "H"]:
+        subset = DF[DF["product_type"] == pt]
+        product_sec[pt] = {
+            "avg_sec": round(float(subset["sec_kwh_per_part"].mean()), 4),
+            "count": int(len(subset)),
+            "avg_deviation": round(float(subset["deviation_pct"].mean()), 1),
+        }
+
+    return {
+        "facility_health_score": efficiency_score,
+        "avg_sec_kwh_per_part": round(avg_sec, 4),
+        "total_energy_kwh": round(total_energy, 0),
+        "total_anomalies": anomaly_count,
+        "est_co2_tonnes": round(co2_tonnes, 2),
+        "fleet_summary": fleet_summary,
+        "daily_trend": daily_trend,
+        "product_sec": product_sec,
+    }
+
+# ─── Additional JSON API Routes ────────────────────────────────────────────────
+
+@app.get("/api/v1/machines")
+async def api_machines():
+    """Return list of machines with their core attributes for the Machine Digital Twin."""
+    fleet = []
+    for mid in MACHINE_IDS:
+        mdata = DF[DF["machine_id"] == mid]
+        fleet.append({
+            "machine_id": mid,
+            "name": f"Machine {mid}",
+            "status": "active" if not mdata.empty else "unknown",
+            "efficiency_score": round(max(0, min(100, 100 - abs(float(mdata["deviation_pct"].mean())))), 1) if not mdata.empty else None,
+            "avg_sec": round(float(mdata["sec_kwh_per_part"].mean()), 4) if not mdata.empty else None,
+            "total_anomalies": int(mdata["is_anomaly"].sum()) if not mdata.empty else 0,
+            "avg_deviation_pct": round(float(mdata["deviation_pct"].mean()), 1) if not mdata.empty else None,
+            "provenance_tier": "tier2",
+        })
+    return fleet
+
+@app.get("/api/v1/telemetry")
+async def api_telemetry(machine_id: str):
+    """Return telemetry timeline for a specific machine (same shape as machine_page)."""
+    mdata = DF[DF["machine_id"] == machine_id]
+    if mdata.empty:
+        return {"error": "Machine not found"}
+    sample = mdata.iloc[::max(1, len(mdata) // 400)]
+    timeline = {
+        "timestamps": [str(t) for t in sample["timestamp"]],
+        "actual": [round(v, 4) for v in sample["energy_kwh"]],
+        "predicted": [round(v, 4) for v in sample["predicted_kwh"]],
+        "is_anomaly": [bool(a) for a in sample["is_anomaly"]],
+    }
+    return timeline
+
+@app.get("/api/v1/anomalies")
+async def api_anomalies():
+    """Return all anomaly records across machines (flattened)."""
+    anom = DF[DF["is_anomaly"]]
+    records = []
+    for _, row in anom.iterrows():
+        records.append({
+            "machine_id": row["machine_id"],
+            "timestamp": str(row["timestamp"]),
+            "actual_kwh": round(float(row["energy_kwh"]), 4),
+            "predicted_kwh": round(float(row["predicted_kwh"]), 4),
+            "deviation_pct": round(float(row["deviation_pct"]), 1),
+            "severity": row["severity"],
+        })
+    return records
+
+@app.get("/api/v1/recommendations")
+async def api_recommendations():
+    """Expose recommendation data as JSON (mirrors HTML recommendations page)."""
+    engine = RecommendationEngine(daily_production=800)
+    recs = engine.generate_recommendations(DF)
+    rec_list = []
+    for r in recs[:8]:
+        rec_list.append({
+            "priority": r.priority,
+            "action": r.action,
+            "reason": r.reason,
+            "category": r.category,
+            "machine_id": r.machine_id,
+            "confidence": round(r.confidence, 0),
+            "difficulty": r.difficulty,
+            "production_impact": r.production_impact,
+            "energy_saving": round(r.expected_benefit.get("energy_saving_kwh", 0), 1),
+            "cost_saving": round(r.expected_benefit.get("cost_saving_inr", 0), 0),
+            "annual_saving": round(r.expected_benefit.get("annual_cost_saving_inr", 0), 0),
+            "co2_reduction": round(r.expected_benefit.get("co2_reduction_kg", 0), 1),
+        })
+    return rec_list
+
+# ─── Additional API Routes (Config) ────────────────────────────────────────
+from pydantic import BaseModel
+
+class ConfigModel(BaseModel):
+    tariff_inr_per_kwh: float = BASE_TARIFF_INR
+    grid_emission_factor_kg_per_kwh: float = GRID_EMISSION_FACTOR
+
+# simple in‑memory storage for config (non‑persistent for demo)
+_current_config = ConfigModel()
+
+@app.get("/api/v1/config")
+async def get_config():
+    """Return current energy tariff and emission factor configuration."""
+    return _current_config.dict()
+
+@app.put("/api/v1/config")
+async def update_config(cfg: ConfigModel):
+    """Update tariff and emission factor. Persisted only for runtime."""
+    global _current_config
+    _current_config = cfg
+    return {"message": "Configuration updated", "config": _current_config.dict()}
+
+# ─── Anomaly resolution endpoint ─────────────────────────────────────────────
+from fastapi import HTTPException
+
+# simple in‑memory set to track resolved anomaly ids (timestamp based key)
+_resolved_anomalies = set()
+
+@app.post("/api/v1/anomalies/{timestamp}/resolve")
+async def resolve_anomaly(timestamp: str):
+    """Mark an anomaly (by its timestamp string) as resolved.
+    The timestamp must match the `timestamp` field returned by /api/v1/anomalies.
+    """
+    # verify existence
+    if not any(row["timestamp"].isoformat() == timestamp for _, row in DF[DF["is_anomaly"]].iterrows()):
+        raise HTTPException(status_code=404, detail="Anomaly not found")
+    _resolved_anomalies.add(timestamp)
+    return {"status": "resolved", "timestamp": timestamp}

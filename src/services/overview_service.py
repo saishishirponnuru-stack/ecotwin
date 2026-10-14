@@ -29,14 +29,15 @@ class OverviewService:
         telemetry_stats = db.query(
             func.count(TelemetryReading.id).label("total_parts"),
             func.sum(TelemetryReading.energy_kwh).label("total_energy"),
-            func.avg(TelemetryReading.sec_kwh_per_part).label("avg_sec"),
             func.min(TelemetryReading.timestamp).label("min_time"),
             func.max(TelemetryReading.timestamp).label("max_time"),
         ).first()
 
         total_parts = telemetry_stats.total_parts or 0
         total_energy = float(telemetry_stats.total_energy or 0.0)
-        avg_sec = float(telemetry_stats.avg_sec or 0.0)
+        # Each telemetry row represents one completed part in the supplied
+        # demonstration dataset, so this ratio is production weighted.
+        avg_sec = total_energy / total_parts if total_parts else 0.0
         
         window_str = "All Time"
         if telemetry_stats.min_time and telemetry_stats.max_time:
@@ -56,7 +57,7 @@ class OverviewService:
         for m in machines:
             m_stats = db.query(
                 func.count(TelemetryReading.id).label("cnt"),
-                func.avg(TelemetryReading.sec_kwh_per_part).label("m_sec"),
+                func.sum(TelemetryReading.energy_kwh).label("m_energy"),
             ).filter(TelemetryReading.machine_id == m.id).first()
 
             m_anom_cnt = db.query(AnomalyEvent).filter(AnomalyEvent.machine_id == m.id).count()
@@ -75,7 +76,7 @@ class OverviewService:
                 "name": m.name,
                 "status": m.status,
                 "efficiency_score": round(eff_score, 1),
-                "avg_sec": round(float(m_stats.m_sec or 0.0), 4),
+                "avg_sec": round(float(m_stats.m_energy or 0.0) / m_stats.cnt if m_stats.cnt else 0.0, 4),
                 "total_anomalies": m_anom_cnt,
                 "avg_deviation_pct": round(dev_pct, 1),
                 "provenance_tier": "TIER_2_PHYSICALLY_DERIVED",
@@ -85,16 +86,18 @@ class OverviewService:
         daily_records = db.query(
             func.date(TelemetryReading.timestamp).label("d_date"),
             func.sum(TelemetryReading.energy_kwh).label("d_actual"),
-            func.avg(TelemetryReading.torque_nm).label("avg_torque"),
-            func.avg(TelemetryReading.rotational_speed_rpm).label("avg_speed"),
-            func.avg(TelemetryReading.cycle_time_minutes).label("avg_ct"),
+            func.sum(
+                TelemetryReading.electrical_power_watts
+                * TelemetryReading.cycle_time_minutes
+                / 60000.0
+            ).label("d_analytical_baseline"),
         ).group_by(func.date(TelemetryReading.timestamp)).order_by("d_date").limit(30).all()
 
         daily_trend = []
         for r in daily_records:
             actual = float(r.d_actual or 0.0)
-            # Theoretical baseline is ~97% of actual
-            baseline = actual * 0.97
+            # A physics-derived comparison line, not an ML prediction.
+            baseline = float(r.d_analytical_baseline or 0.0)
             savings = max(0.0, actual - baseline)
             daily_trend.append({
                 "date": str(r.d_date),

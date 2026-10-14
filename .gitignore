@@ -12,6 +12,11 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
+*.tsbuildinfo
+/.work/
+/outputs/
+/.manus/
+/backups/
 
 # Node / Frontend
 node_modules/
@@ -21,13 +26,17 @@ dist/
 # Environment files
 .env
 .env.local
+.env.*
 
 # Database files
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 
 # OS files
 .DS_Store
 Thumbs.db
-

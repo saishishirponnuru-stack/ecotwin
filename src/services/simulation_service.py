@@ -9,7 +9,7 @@ import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from src.db.models import TelemetryReading, SimulationScenario, SystemSetting
+from src.db.models import Machine, TelemetryReading, SimulationScenario, SystemSetting
 from src.utils.constants import (
     GRID_EMISSION_FACTOR,
     BASE_TARIFF_INR,
@@ -33,6 +33,8 @@ class SimulationService:
         """
         Runs a physics-grounded What-If simulation with coupled variables.
         """
+        if not db.get(Machine, machine_id):
+            raise ValueError(f"Machine '{machine_id}' not found")
         # 1. Fetch Machine Baseline Values
         base_stats = db.query(
             func.avg(TelemetryReading.rotational_speed_rpm).label("speed"),
@@ -41,7 +43,11 @@ class SimulationService:
             func.avg(TelemetryReading.tool_wear_min).label("wear"),
             func.avg(TelemetryReading.idle_time_seconds).label("idle"),
             func.avg(TelemetryReading.energy_kwh).label("energy"),
+            func.count(TelemetryReading.id).label("reading_count"),
         ).filter(TelemetryReading.machine_id == machine_id).first()
+
+        if not base_stats.reading_count:
+            raise ValueError(f"Machine '{machine_id}' has no telemetry available for simulation")
 
         base_speed = float(base_stats.speed or 1500.0)
         base_torque = float(base_stats.torque or 40.0)

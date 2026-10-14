@@ -24,16 +24,19 @@ def simulate_scenario(req: WhatIfRequest, db: Session = Depends(get_db)):
     Simulate operational parameter modifications.
     Enforces coupled machining kinematics and standardized OOD evaluation.
     """
-    return SimulationService.simulate(
-        db=db,
-        machine_id=req.machine_id,
-        spindle_speed_rpm=req.spindle_speed_rpm,
-        torque_nm=req.torque_nm,
-        tool_replacement=req.tool_replacement or False,
-        idle_cutoff_seconds=req.idle_cutoff_seconds,
-        shift_reschedule=req.shift_reschedule,
-        daily_production=req.daily_production or 800,
-    )
+    try:
+        return SimulationService.simulate(
+            db=db,
+            machine_id=req.machine_id,
+            spindle_speed_rpm=req.spindle_speed_rpm,
+            torque_nm=req.torque_nm,
+            tool_replacement=req.tool_replacement or False,
+            idle_cutoff_seconds=req.idle_cutoff_seconds,
+            shift_reschedule=req.shift_reschedule,
+            daily_production=req.daily_production or 800,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/whatif/save", response_model=ScenarioResponse)

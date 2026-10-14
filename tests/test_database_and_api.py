@@ -189,6 +189,10 @@ def test_api_v1_anomalies_and_resolution():
     assert res_resolve.status_code == 200
     assert res_resolve.json()["is_resolved"] is True
 
+    resolved = client.get("/api/v1/anomalies?is_resolved=true")
+    assert resolved.status_code == 200
+    assert all(event["is_resolved"] for event in resolved.json()["anomalies"])
+
     # 404 test
     res_404 = client.post("/api/v1/anomalies/9999999/resolve", json={})
     assert res_404.status_code == 404
@@ -224,6 +228,29 @@ def test_api_v1_whatif_simulate_invalid_bounds():
     assert response.status_code == 422  # Unprocessable Entity
 
 
+def test_api_v1_whatif_rejects_non_finite_values():
+    response = client.post("/api/v1/whatif/simulate", json={"machine_id": "M-02", "torque_nm": "NaN"})
+    assert response.status_code == 422
+
+
+def test_api_v1_whatif_rejects_unknown_machine():
+    """A simulation must use observed telemetry from a registered machine."""
+    response = client.post("/api/v1/whatif/simulate", json={"machine_id": "M-99"})
+    assert response.status_code == 404
+
+
+def test_api_v1_recommendations_have_evidence_without_unvalidated_benefits():
+    """Rules expose their observed evidence but do not invent savings estimates."""
+    response = client.get("/api/v1/recommendations")
+    assert response.status_code == 200
+    recommendations = response.json()["recommendations"]
+    for recommendation in recommendations:
+        assert recommendation["evidence_source"]
+        assert recommendation["evidence_summary"]
+        assert "confidence" not in recommendation
+        assert recommendation["expected_benefit"] == {}
+
+
 def test_api_v1_config_get_and_update():
     """Test configurable tariffs and emission factors."""
     res_get = client.get("/api/v1/config")
@@ -240,3 +267,22 @@ def test_api_v1_config_get_and_update():
     updated_items = res_put.json()
     tariff_entry = next(i for i in updated_items if i["key"] == "base_tariff_inr")
     assert tariff_entry["value"] == "9.25"
+
+
+def test_api_v1_config_rejects_invalid_energy_settings():
+    before = {item["key"]: item["value"] for item in client.get("/api/v1/config").json()}
+    invalid_updates = [
+        {"base_tariff_inr": "-1"},
+        {"base_tariff_inr": "not-a-number"},
+        {"base_tariff_inr": "NaN"},
+        {"base_tariff_inr": "Infinity"},
+        {"grid_emission_factor": "-0.01"},
+        {"motor_efficiency": "0"},
+        {"motor_efficiency": "1.01"},
+    ]
+    for settings in invalid_updates:
+        response = client.put("/api/v1/config", json={"settings": settings})
+        assert response.status_code == 422
+
+    after = {item["key"]: item["value"] for item in client.get("/api/v1/config").json()}
+    assert after == before
