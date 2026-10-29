@@ -107,7 +107,9 @@ app.include_router(api_v1_router)
 configure_cors(app)
 
 DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
-app.mount("/static", StaticFiles(directory=os.path.join(DASHBOARD_DIR, "static")), name="static")
+STATIC_DIR = os.path.join(DASHBOARD_DIR, "static")
+if os.path.isdir(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=os.path.join(DASHBOARD_DIR, "templates"))
 
 
