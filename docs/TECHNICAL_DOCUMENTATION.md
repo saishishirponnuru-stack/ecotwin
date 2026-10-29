@@ -21,7 +21,7 @@ flowchart LR
 
 ### Backend
 
-`dashboard/app.py` creates the FastAPI app, loads the processed CSV and `models/best_energy_model.joblib`, and mounts the versioned API router from `src/api/v1/__init__.py` at `/api`. The version router adds `/v1`, resulting in public paths such as `/api/v1/overview`. The application also retains legacy server-rendered dashboard routes and templates; these are not the React SPA routes.
+`dashboard/app.py` creates the FastAPI app, initializes the database during lifespan startup, and mounts the versioned API router from `src/api/v1/__init__.py` at `/api`. The version router adds `/v1`, resulting in public paths such as `/api/v1/overview`. An empty database's initial seed reads the processed CSV; the saved model and legacy analytics dataframe are loaded on demand only for retained model-backed routes. The active React REST routes use SQLAlchemy-backed services. The application also retains legacy server-rendered dashboard routes and templates; these are not the React SPA routes.
 
 Business logic is mostly in `src/services/`, ORM entities/session setup are in `src/db/`, request/response schemas are in `src/schemas/`, physical assumptions and provenance labels are in `src/utils/constants.py`, and data loading/processing is in `src/data/`.
 
@@ -30,9 +30,10 @@ The older standalone modules `src/optimization/simulator.py` and `src/optimizati
 ### Startup and configuration
 
 - `DATABASE_URL` is read by `src/db/database.py` when the Python process imports the database module. The default is a relative SQLite URL (`sqlite:///./ecotwin.db`), so the effective path depends on the process working directory.
-- `dashboard.app` loads source CSV/model resources during import/startup. Normal startup loads the model; it does not fit or retrain it.
-- `src/db/seed.py` calls `init_db()` and inserts missing machine/settings/batch/telemetry/demo-anomaly records. Use it only with a fresh, disposable database for a demonstration. Although it avoids insertion when a complete telemetry set already exists, it is not a migration, data reset, or repair workflow for arbitrary partial databases.
+- The FastAPI lifespan calls `src/db/bootstrap.py`: missing tables are created, and `src/db/seed.py` is invoked only if every application data table is empty. Existing rows prevent automatic demo seeding; partial or existing databases are preserved rather than supplemented.
+- The legacy model/data loader is lazy and thread-guarded. First-time empty-database seeding separately reads the CSV but does not load the predictor artifact. If a legacy model-backed route cannot load its dataset/model, that route returns HTTP 503; database-backed `/api/v1` endpoints remain available. The app does not retrain the model.
 - Vite is configured for port 5173 and proxies `/api` to `http://localhost:8000`. The frontend's optional `VITE_API_BASE_URL` overrides its request prefix; it does not, by itself, reconfigure Vite's proxy target.
+- CORS reads comma-separated exact origins from `FRONTEND_ORIGINS`; paths and wildcard origins are rejected. Local Vite origins are the fallback only when that variable is unset; an explicit production list replaces them.
 
 ## 2. Main API surface
 
@@ -174,3 +175,12 @@ npm run build
 ```
 
 For any suite that may write through the app-level SQLAlchemy engine, set `DATABASE_URL` to a fresh test database and seed that database before running API tests. Preserve the original working `ecotwin.db`; do not use it for reset or mutation testing.
+
+
+## 12. Render Free deployment configuration
+
+The root `render.yaml` describes two services: a Python 3.12.9 FastAPI web service (`uvicorn dashboard.app:app --host 0.0.0.0 --port $PORT`) and a static Vite frontend built from `frontend/`. The frontend build receives `VITE_API_BASE_URL=https://ecotwin-api.onrender.com/api`; the API allows `https://ecotwin-frontend.onrender.com` through `FRONTEND_ORIGINS`. If Render assigns different service hostnames or a custom domain is used, update both values to the exact API prefix and browser origin. The API health check is `/api/v1/health`.
+
+The Blueprint sets `DATABASE_URL=sqlite:////tmp/ecotwin.db`. Render Free's filesystem is ephemeral, not durable storage: data can disappear on restart, redeploy, or instance replacement. An empty database is initialized and seeded on startup; a persistent production database and backup/restore plan are required for durable user data. No Render deployment has been performed or externally verified.
+
+The predictor and processed CSV are not loaded for the active database-backed API at startup; this avoids importing the saved model's scikit-learn/XGBoost stack on the normal path. A fresh empty database still invokes CSV seeding, which uses pandas and NumPy. The configured 512 MB instance limit has not been measured under a live Render workload, so memory sufficiency is not empirically verified. Keep legacy dashboard routes off the critical startup path and monitor memory during any deployment trial. This prototype configuration does not provide authentication or a production multi-user security boundary.

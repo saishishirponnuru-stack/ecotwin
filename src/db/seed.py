@@ -88,8 +88,52 @@ def seed_database(
     }
 
     try:
-        # Ensure tables exist
-        init_db()
+        # A caller-supplied session owns its schema and engine. Avoid touching
+        # the process-global database when seeding an isolated test database.
+        if session is None:
+            init_db()
+
+        if not os.path.isfile(path):
+            report["status"] = "failed"
+            report["errors"].append(f"CSV file not found at {path}")
+            db.rollback()
+            return report
+
+        # Validate input before inserting settings, machines, or telemetry.
+        df = pd.read_csv(path)
+        if max_rows and max_rows > 0:
+            df = df.head(max_rows)
+
+        required_cols = [
+            "timestamp", "machine_id", "product_type", "shift",
+            "rotational_speed_rpm", "torque_nm", "tool_wear_min",
+            "air_temp_k", "process_temp_k", "power_watts", "energy_kwh",
+        ]
+        missing = [column for column in required_cols if column not in df.columns]
+        if missing:
+            report["status"] = "failed"
+            report["errors"].append(f"Missing required columns in CSV: {missing}")
+            db.rollback()
+            return report
+        if df.empty:
+            report["status"] = "failed"
+            report["errors"].append("CSV contains no rows to seed.")
+            db.rollback()
+            return report
+
+        # Telemetry has no enforced natural-key constraint. If any already
+        # exists, leave the database untouched instead of re-importing rows.
+        existing_telemetry_count = db.query(TelemetryReading).count()
+        if existing_telemetry_count > 0:
+            report["telemetry_skipped"] = len(df)
+            report["status"] = (
+                "success_already_seeded"
+                if existing_telemetry_count >= len(df)
+                else "existing_telemetry_preserved"
+            )
+            logger.info("Existing telemetry found; skipping demo-data insertion.")
+            db.rollback()
+            return report
 
         # 1. Seed System Settings (idempotent)
         for s in DEFAULT_SETTINGS:
@@ -97,7 +141,7 @@ def seed_database(
             if not existing_setting:
                 db.add(SystemSetting(key=s["key"], value=s["value"], description=s["description"]))
                 report["settings_created"] += 1
-        db.commit()
+        db.flush()
 
         # 2. Seed Machines (idempotent)
         for m_data in INITIAL_MACHINES:
@@ -112,29 +156,7 @@ def seed_database(
                 )
                 db.add(machine)
                 report["machines_created"] += 1
-        db.commit()
-
-        # 3. Read and validate CSV
-        if not os.path.exists(path):
-            report["status"] = "failed"
-            report["errors"].append(f"CSV file not found at {path}")
-            return report
-
-        df = pd.read_csv(path)
-        if max_rows and max_rows > 0:
-            df = df.head(max_rows)
-
-        # Schema validation
-        required_cols = [
-            "timestamp", "machine_id", "product_type", "shift",
-            "rotational_speed_rpm", "torque_nm", "tool_wear_min",
-            "air_temp_k", "process_temp_k", "power_watts", "energy_kwh",
-        ]
-        missing = [c for c in required_cols if c not in df.columns]
-        if missing:
-            report["status"] = "failed"
-            report["errors"].append(f"Missing required columns in CSV: {missing}")
-            return report
+        db.flush()
 
         # 4. Seed Production Batches (idempotent)
         batch_ids = df["production_batch_id"].dropna().unique() if "production_batch_id" in df.columns else []
@@ -149,17 +171,9 @@ def seed_database(
                 )
                 db.add(batch)
                 report["batches_created"] += 1
-        db.commit()
+        db.flush()
 
-        # 5. Check existing telemetry count
-        existing_telemetry_count = db.query(TelemetryReading).count()
-        if existing_telemetry_count > 0 and (max_rows is None or existing_telemetry_count >= len(df)):
-            report["telemetry_skipped"] = len(df)
-            report["status"] = "success_already_seeded"
-            logger.info("Telemetry readings already exist in DB. Skipping duplicate ingestion.")
-            return report
-
-        # 6. Insert Telemetry Records
+        # 5. Insert Telemetry Records
         # Bulk prepare records
         telemetry_objects = []
         rejected = 0
@@ -230,10 +244,10 @@ def seed_database(
 
         if telemetry_objects:
             db.bulk_save_objects(telemetry_objects)
-            db.commit()
+            db.flush()
             report["telemetry_inserted"] = len(telemetry_objects)
 
-        # 7. Seed sample anomaly events for flagged machines (M-02 and M-04)
+        # 6. Seed sample anomaly events for flagged machines (M-02 and M-04)
         existing_anomalies = db.query(AnomalyEvent).count()
         if existing_anomalies == 0:
             sample_readings = db.query(TelemetryReading).filter(
@@ -264,9 +278,9 @@ def seed_database(
                     )
                     db.add(event)
                     report["anomalies_created"] += 1
-            db.commit()
 
         report["status"] = "success"
+        db.commit()
         return report
 
     except Exception as e:

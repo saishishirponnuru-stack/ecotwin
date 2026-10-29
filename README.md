@@ -66,7 +66,7 @@ npm run dev -- --host 127.0.0.1
 
 Open the Vite URL printed by the command (normally `http://127.0.0.1:5173`). The Vite development server proxies `/api` to `http://localhost:8000`. The React API client defaults to `/api`; `VITE_API_BASE_URL` can override that request prefix when a different deployment topology is deliberately configured.
 
-The backend imports the processed dataset and saved model during startup. Keep `data/processed/manufacturing_data.csv` and the model artifact in place. The seed utility creates missing schema/tables, machine/settings records, production batches, telemetry, and eligible sample anomaly events; it does not delete records. For a new demonstration, use a fresh filename such as `ecotwin_demo.db`. Do not use the seeder as a reset or migration tool for an arbitrary or partially populated database.
+At FastAPI startup, `src/db/bootstrap.py` creates missing tables and seeds the demo dataset only when all application data tables are empty. That first-time seed reads the processed CSV; existing data is preserved without automatic supplementation. The saved model and its legacy analytics dataframe are loaded only if a retained model-backed dashboard route is requested; the active database-backed React API does not load the ML artifact at startup. Keep the processed CSV and model artifact available for the seed/legacy paths. The seed utility does not delete records and is not a migration or repair tool for a partially populated database.
 
 The root `ecotwin.db` is local working data and is intentionally not included in the portable source ZIP. Protect and back it up separately according to local data-handling requirements.
 
@@ -74,6 +74,7 @@ The root `ecotwin.db` is local working data and is intentionally not included in
 
 - `DATABASE_URL`: SQLAlchemy URL; default `sqlite:///./ecotwin.db`, relative to the process working directory. Set it before launching Python. SQLite is the configured and tested default. Other database URLs require a compatible SQLAlchemy driver and have not been validated by this project.
 - `VITE_API_BASE_URL`: optional frontend API prefix; default `/api`. The development proxy target is configured in `frontend/vite.config.ts`.
+- `FRONTEND_ORIGINS`: comma-separated exact browser origins allowed by FastAPI CORS, for example `https://ecotwin-frontend.onrender.com`. Do not include paths or wildcard origins.
 - No API key is required for the documented local workflow. Do not place credentials in source control or in the portable source package.
 
 ## API documentation
@@ -137,4 +138,6 @@ Settings → **Reset Demo Data** asks for explicit confirmation. `POST /api/v1/d
 
 ## Deployment considerations
 
-This repository includes no deployment target, infrastructure-as-code, production process manager, authentication layer, or validated multi-user security model. Before deployment, add an explicit security review, authentication/authorization, secret management, TLS, database backup/restore procedures, migration policy, observability, and production-grade data governance. Configure the React static build and API routing deliberately; the Vite proxy is development-only. Validate tariff/emissions assumptions for the actual jurisdiction and time period, and implement a documented measurement-and-verification protocol before reporting realized impact.
+`render.yaml` defines a separate free-tier FastAPI web service and Vite static site. It sets the API start command, frontend build, `FRONTEND_ORIGINS`, and `VITE_API_BASE_URL`; confirm the assigned Render hostnames match those values if names/domains change. The API uses SQLite at `/tmp/ecotwin.db` on Render Free. That filesystem is ephemeral: database contents can be lost on restart, redeploy, or instance replacement, so this configuration is suitable for a demonstration rather than durable multi-user storage. No deployment has been performed.
+
+Render configuration does not add authentication, authorization, durable database backups, migrations, or production-grade observability. Do not expose sensitive or customer data. Before operational use, complete a security review and data-governance plan, validate tariff/emissions assumptions for the actual jurisdiction and period, and implement a documented measurement-and-verification protocol before reporting realized impact.

@@ -119,7 +119,7 @@ export default function RecommendationsPage() {
               <p className="text-sm text-gray-400 mt-1">{rec.reason}</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded bg-gray-900 p-2 text-center">
                 <p className="text-xs text-gray-500">Energy benefit</p>
                 <p className="font-semibold text-teal-300">{quantified(rec.expected_benefit.energy_kwh, 'kWh')}</p>

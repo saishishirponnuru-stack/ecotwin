@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: ecotwin-api
+    runtime: python
+    plan: free
+    buildCommand: python -m pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn dashboard.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.9
+      - key: DATABASE_URL
+        value: sqlite:////tmp/ecotwin.db
+      - key: FRONTEND_ORIGINS
+        value: https://ecotwin-frontend.onrender.com
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+
+  - type: web
+    name: ecotwin-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: VITE_API_BASE_URL
+        value: https://ecotwin-api.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

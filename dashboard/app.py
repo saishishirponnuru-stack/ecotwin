@@ -7,52 +7,104 @@ FastAPI + Jinja2 + Tailwind CSS + Alpine.js + Plotly.js
 Run: python -m uvicorn dashboard.app:app --reload --port 8000
 """
 
+import json
+import logging
 import os
 import sys
-import json
-import numpy as np
-import pandas as pd
-from fastapi import FastAPI, Request
+import threading
+from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.models.predictor import EnergyPredictor
-from src.optimization.impact import ImpactCalculator
-from src.optimization.recommender import RecommendationEngine
 from src.utils.constants import GRID_EMISSION_FACTOR, BASE_TARIFF_INR, MACHINE_IDS
 from src.api.v1 import api_v1_router
-from src.db.database import init_db
+from src.db.bootstrap import initialize_database
+
+logger = logging.getLogger(__name__)
+
+LOCAL_DEVELOPMENT_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
+
+
+def get_cors_origins(configured_origins=None):
+    """Use local defaults only when unconfigured; production origins are explicit."""
+    raw_origins = os.getenv("FRONTEND_ORIGINS", "") if configured_origins is None else configured_origins
+    origins = list(LOCAL_DEVELOPMENT_ORIGINS) if not str(raw_origins).strip() else []
+    for raw_origin in str(raw_origins).split(","):
+        raw_origin = raw_origin.strip()
+        if not raw_origin:
+            continue
+        if "*" in raw_origin:
+            raise ValueError("FRONTEND_ORIGINS must list exact origins; wildcard origins are not allowed.")
+        parsed = urlsplit(raw_origin)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+            or parsed.username
+            or parsed.password
+        ):
+            raise ValueError(f"Invalid frontend origin in FRONTEND_ORIGINS: {raw_origin!r}")
+        origin = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+        if origin not in origins:
+            origins.append(origin)
+    return origins
+
+
+def configure_cors(target_app, configured_origins=None):
+    """Install CORS for local development and explicitly listed production origins."""
+    origins = get_cors_origins(configured_origins)
+    target_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    return origins
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    """Initialize schema/demo data before API requests are served."""
+    try:
+        result = initialize_database()
+    except Exception as exc:
+        logger.exception("EcoTwin database startup initialization failed.")
+        raise RuntimeError(
+            "EcoTwin could not initialize its database. Check the database URL, "
+            "write permissions, and demo CSV configuration."
+        ) from exc
+    logger.info("EcoTwin database startup status: %s", result.get("status", "unknown"))
+    yield
 
 # ─── FastAPI App ─────────────────────────────────────────────────────────────
 app = FastAPI(
     title="EcoTwin API",
     description="Industrial Energy Intelligence REST API",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 # Mount REST API v1 routers
 app.include_router(api_v1_router)
 
-# Enable CORS for local frontend development
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+configure_cors(app)
 
 DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(DASHBOARD_DIR, "static")), name="static")
@@ -64,14 +116,31 @@ templates = Jinja2Templates(directory=os.path.join(DASHBOARD_DIR, "templates"))
 # ─── Data & Model Loading ────────────────────────────────────────────────────
 def load_all_data():
     """Load processed data and trained model."""
+    global np, pd
+    import numpy as np_module
+    import pandas as pd_module
+
+    np, pd = np_module, pd_module
     data_path = os.path.join(PROJECT_ROOT, "data", "processed", "manufacturing_data.csv")
-    df = pd.read_csv(data_path)
+    if not os.path.isfile(data_path):
+        raise FileNotFoundError(f"Processed manufacturing dataset not found: {data_path}")
+    try:
+        df = pd.read_csv(data_path)
+    except Exception as exc:
+        raise RuntimeError(f"Could not read processed manufacturing dataset '{data_path}': {exc}") from exc
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df["product_type_encoded"] = df["product_type"].map({"L": 0, "M": 1, "H": 2})
     df["shift_encoded"] = df["shift"].map({"Day": 0, "Evening": 1, "Night": 2})
 
     model_path = os.path.join(PROJECT_ROOT, "models", "best_energy_model.joblib")
-    model = EnergyPredictor.load(model_path)
+    if not os.path.isfile(model_path):
+        raise FileNotFoundError(f"Saved energy model not found: {model_path}")
+    try:
+        from src.models.predictor import EnergyPredictor
+
+        model = EnergyPredictor.load(model_path)
+    except Exception as exc:
+        raise RuntimeError(f"Could not load saved energy model '{model_path}': {exc}") from exc
 
     features = [
         "power_watts", "rotational_speed_rpm", "torque_nm", "tool_wear_min",
@@ -99,14 +168,45 @@ def load_all_data():
     return df, model, features
 
 
-# Load on startup
-DF, MODEL, FEATURES = load_all_data()
+DF = None
+MODEL = None
+FEATURES = []
+np = None
+pd = None
+_DATA_LOAD_ATTEMPTED = False
+_DATA_LOAD_ERROR = None
+_DATA_LOAD_LOCK = threading.Lock()
+
+
+def _ensure_legacy_assets():
+    """Load the legacy model/data path once; database-backed REST APIs do not need it."""
+    global DF, MODEL, FEATURES, np, pd, _DATA_LOAD_ATTEMPTED, _DATA_LOAD_ERROR
+    if not _DATA_LOAD_ATTEMPTED:
+        with _DATA_LOAD_LOCK:
+            if not _DATA_LOAD_ATTEMPTED:
+                try:
+                    import numpy as numpy_module
+                    import pandas as pandas_module
+
+                    np, pd = numpy_module, pandas_module
+                    DF, MODEL, FEATURES = load_all_data()
+                except Exception as exc:
+                    _DATA_LOAD_ERROR = f"{type(exc).__name__}: {exc}"
+                    logger.exception("Legacy model-backed pages are unavailable; database APIs remain enabled.")
+                finally:
+                    _DATA_LOAD_ATTEMPTED = True
+    if _DATA_LOAD_ERROR:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Legacy model-backed analytics are unavailable: {_DATA_LOAD_ERROR}",
+        )
 
 
 # ─── Template Routes (HTML Pages) ────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 async def overview_page(request: Request):
     """Factory Overview page."""
+    _ensure_legacy_assets()
     avg_sec = float(DF["sec_kwh_per_part"].mean())
     total_energy = float(DF["energy_kwh"].sum())
     anomaly_count = int(DF["is_anomaly"].sum())
@@ -183,6 +283,7 @@ async def overview_page(request: Request):
 @app.get("/machine/{machine_id}", response_class=HTMLResponse)
 async def machine_page(request: Request, machine_id: str):
     """Machine Deep-Dive page."""
+    _ensure_legacy_assets()
     mdata = DF[DF["machine_id"] == machine_id]
     if mdata.empty:
         machine_id = "M-01"
@@ -261,6 +362,7 @@ async def machine_page(request: Request, machine_id: str):
 @app.get("/whatif", response_class=HTMLResponse)
 async def whatif_page(request: Request):
     """What-If Lab page."""
+    _ensure_legacy_assets()
     baseline = {
         "torque_nm": round(float(DF["torque_nm"].median()), 1),
         "process_temp_k": round(float(DF["process_temp_k"].median()), 1),
@@ -281,6 +383,9 @@ async def whatif_page(request: Request):
 @app.get("/recommendations", response_class=HTMLResponse)
 async def recommendations_page(request: Request):
     """Recommendations page."""
+    _ensure_legacy_assets()
+    from src.optimization.recommender import RecommendationEngine
+
     engine = RecommendationEngine(daily_production=800)
     recs = engine.generate_recommendations(DF)
 
@@ -327,6 +432,7 @@ async def api_simulate(
     daily_production: int = 800,
 ):
     """What-If simulation API endpoint."""
+    _ensure_legacy_assets()
     baseline = {
         "power_watts": float(DF["power_watts"].median()),
         "rotational_speed_rpm": float(DF["rotational_speed_rpm"].median()),
@@ -376,6 +482,7 @@ async def api_simulate(
 @app.get("/api/health")
 async def health():
     """API health check."""
+    _ensure_legacy_assets()
     return {
         "status": "healthy",
         "model": "XGBoost",
@@ -391,6 +498,7 @@ async def api_overview():
     Mirrors the data passed to the HTML overview template.
     Returns fields matching `OverviewResponse` TypeScript interface.
     """
+    _ensure_legacy_assets()
     # Core KPI calculations (same as HTML route)
     avg_sec = float(DF["sec_kwh_per_part"].mean())
     total_energy = float(DF["energy_kwh"].sum())
@@ -458,6 +566,7 @@ async def api_overview():
 @app.get("/api/v1/machines")
 async def api_machines():
     """Return list of machines with their core attributes for the Machine Digital Twin."""
+    _ensure_legacy_assets()
     fleet = []
     for mid in MACHINE_IDS:
         mdata = DF[DF["machine_id"] == mid]
@@ -476,6 +585,7 @@ async def api_machines():
 @app.get("/api/v1/telemetry")
 async def api_telemetry(machine_id: str):
     """Return telemetry timeline for a specific machine (same shape as machine_page)."""
+    _ensure_legacy_assets()
     mdata = DF[DF["machine_id"] == machine_id]
     if mdata.empty:
         return {"error": "Machine not found"}
@@ -491,6 +601,7 @@ async def api_telemetry(machine_id: str):
 @app.get("/api/v1/anomalies")
 async def api_anomalies():
     """Return all anomaly records across machines (flattened)."""
+    _ensure_legacy_assets()
     anom = DF[DF["is_anomaly"]]
     records = []
     for _, row in anom.iterrows():
@@ -507,6 +618,9 @@ async def api_anomalies():
 @app.get("/api/v1/recommendations")
 async def api_recommendations():
     """Expose recommendation data as JSON (mirrors HTML recommendations page)."""
+    _ensure_legacy_assets()
+    from src.optimization.recommender import RecommendationEngine
+
     engine = RecommendationEngine(daily_production=800)
     recs = engine.generate_recommendations(DF)
     rec_list = []
@@ -550,7 +664,6 @@ async def update_config(cfg: ConfigModel):
     return {"message": "Configuration updated", "config": _current_config.dict()}
 
 # ─── Anomaly resolution endpoint ─────────────────────────────────────────────
-from fastapi import HTTPException
 
 # simple in‑memory set to track resolved anomaly ids (timestamp based key)
 _resolved_anomalies = set()
@@ -560,6 +673,7 @@ async def resolve_anomaly(timestamp: str):
     """Mark an anomaly (by its timestamp string) as resolved.
     The timestamp must match the `timestamp` field returned by /api/v1/anomalies.
     """
+    _ensure_legacy_assets()
     # verify existence
     if not any(row["timestamp"].isoformat() == timestamp for _, row in DF[DF["is_anomaly"]].iterrows()):
         raise HTTPException(status_code=404, detail="Anomaly not found")

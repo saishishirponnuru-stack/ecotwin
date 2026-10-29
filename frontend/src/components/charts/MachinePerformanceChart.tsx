@@ -54,7 +54,7 @@ const MachinePerformanceChart: React.FC<MachinePerformanceChartProps> = ({ machi
     ],
   };
 
-  return <EChartsReactCore key={theme} echarts={echarts} option={option} notMerge={true} style={{ height: '300px', width: '100%' }} />;
+  return <EChartsReactCore key={theme} echarts={echarts} option={option} notMerge={true} style={{ height: 'clamp(240px, 32vw, 300px)', width: '100%' }} autoResize={true} />;
 };
 
 export default MachinePerformanceChart;

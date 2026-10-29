@@ -129,7 +129,7 @@ export default function ImpactVerificationPage() {
                   <option key={scenario.id} value={scenario.id}>{scenario.name} — {scenario.machine_id}</option>
                 ))}
               </select>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {[
                 { label: 'Daily Energy Saving', value: `${formatMetric(selectedScenario?.result_out['daily_saving_kwh'])} kWh`, sub: 'SIMULATED' },
                 { label: 'Ann. Cost Saving (Est.)', value: formatCurrency(selectedScenario?.result_out['annual_cost_saving_inr']), sub: 'SIMULATED' },
@@ -187,7 +187,7 @@ export default function ImpactVerificationPage() {
               <button className="ml-2 rounded bg-teal-600 px-2 py-0.5 text-xs text-white hover:bg-teal-500" onClick={() => refetchAnomalies()}>Retry</button>
             </div>
           )}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
               { label: 'Open Anomalies', value: openCount ?? anomalyUnavailable, color: 'text-red-300' },
               { label: 'Resolved Anomalies', value: resolvedCount ?? anomalyUnavailable, color: 'text-teal-300' },

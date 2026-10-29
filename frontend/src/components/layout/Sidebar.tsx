@@ -14,31 +14,53 @@ const navItems = [
   { name: 'Settings', path: '/settings', enabled: true },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  open: boolean;
+  isMobile: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
   return (
-    <nav className="app-sidebar w-64 bg-gray-800 text-gray-100 flex flex-col p-4">
-      <div className="text-xl font-semibold mb-6 text-teal-300">EcoTwin</div>
-      <ul className="flex-1 space-y-2">
-        {navItems.map(item => (
-          <li key={item.name}>
-            {item.enabled ? (
-              <NavLink
-                to={item.path}
-                className={({ isActive }: { isActive: boolean }) =>
-                  `block py-2 px-3 rounded hover:bg-gray-700 ${isActive ? 'bg-gray-700' : ''}`
-                }
-              >
-                {item.name}
-              </NavLink>
-            ) : (
-              <span className="block py-2 px-3 rounded text-gray-500 cursor-not-allowed" title="Planned">
-                {item.name}
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4 text-sm text-gray-400">Version 0.2.0</div>
-    </nav>
+    <>
+      {isMobile && open && (
+        <button type="button" className="sidebar-backdrop" aria-label="Close navigation menu" onClick={onClose} />
+      )}
+      <nav
+        id="primary-navigation"
+        aria-label="Primary navigation"
+        inert={isMobile && !open ? true : undefined}
+        className={`app-sidebar w-64 bg-gray-800 text-gray-100 flex flex-col p-4 ${open ? 'is-open' : ''}`}
+      >
+        <div className="mb-6 flex items-center justify-between text-xl font-semibold text-teal-300">
+          <span>EcoTwin</span>
+          <button type="button" className="sidebar-close" aria-label="Close navigation menu" onClick={onClose}>
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+        <ul className="flex-1 space-y-2">
+          {navItems.map(item => (
+            <li key={item.name}>
+              {item.enabled ? (
+                <NavLink
+                  to={item.path}
+                  onClick={onClose}
+                  className={({ isActive }: { isActive: boolean }) =>
+                    `block py-2 px-3 rounded hover:bg-gray-700 ${isActive ? 'bg-gray-700' : ''}`
+                  }
+                >
+                  {item.name}
+                </NavLink>
+              ) : (
+                <span className="block py-2 px-3 rounded text-gray-500 cursor-not-allowed" title="Planned">
+                  {item.name}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 text-sm text-gray-400">Version 0.2.0</div>
+      </nav>
+    </>
   );
 }

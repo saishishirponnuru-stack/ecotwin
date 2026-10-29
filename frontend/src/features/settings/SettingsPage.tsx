@@ -122,7 +122,7 @@ export default function SettingsPage() {
             aria-modal="true"
             aria-labelledby="reset-demo-title"
             aria-describedby="reset-demo-description"
-            className="w-full max-w-lg space-y-4 rounded border border-red-700 bg-gray-900 p-5 shadow-xl"
+            className="max-h-[calc(100vh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded border border-red-700 bg-gray-900 p-5 shadow-xl"
           >
             <div>
               <h3 id="reset-demo-title" className="text-lg font-semibold text-red-200">Confirm Reset Demo Data</h3>

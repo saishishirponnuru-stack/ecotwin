@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Sidebar from './components/layout/Sidebar';
@@ -26,35 +26,65 @@ const queryClient = new QueryClient({
   },
 });
 
+function AppShell() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const updateViewport = () => setIsMobile(media.matches);
+    updateViewport();
+    media.addEventListener('change', updateViewport);
+    return () => media.removeEventListener('change', updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [menuOpen]);
+
+  return (
+    <div className="app-shell flex h-screen bg-gray-900 text-gray-100">
+      <Sidebar open={menuOpen} isMobile={isMobile} onClose={() => setMenuOpen(false)} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <Header
+          title="EcoTwin — Smart Manufacturing Energy Intelligence"
+          menuOpen={menuOpen}
+          onMenuClick={() => setMenuOpen(open => !open)}
+        />
+        <main className="app-main min-w-0 flex-1 overflow-auto p-3 sm:p-4 lg:p-6">
+          <Suspense fallback={<div className="flex h-40 items-center justify-center text-sm text-gray-400">Loading workspace…</div>}>
+            <Routes>
+              <Route path="/" element={<OverviewPage />} />
+              <Route path="/machine" element={<MachineFleetPage />} />
+              <Route path="/machine/:machineId" element={<MachineDetailPage />} />
+              <Route path="/energy" element={<EnergyIntelligencePage />} />
+              <Route path="/anomaly" element={<AnomalyCenterPage />} />
+              <Route path="/recommendations" element={<RecommendationsPage />} />
+              <Route path="/whatif" element={<WhatIfLabPage />} />
+              <Route path="/impact" element={<ImpactVerificationPage />} />
+              <Route path="/data" element={<DataManagementPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
         <QueryClientProvider client={queryClient}>
-          <div className="app-shell flex h-screen bg-gray-900 text-gray-100">
-            <Sidebar />
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <Header title="EcoTwin — Smart Manufacturing Energy Intelligence" />
-              <main className="flex-1 overflow-auto p-6">
-                <Suspense fallback={<div className="flex h-40 items-center justify-center text-sm text-gray-400">Loading workspace…</div>}>
-                  <Routes>
-                    <Route path="/" element={<OverviewPage />} />
-                    <Route path="/machine" element={<MachineFleetPage />} />
-                    <Route path="/machine/:machineId" element={<MachineDetailPage />} />
-                    <Route path="/energy" element={<EnergyIntelligencePage />} />
-                    <Route path="/anomaly" element={<AnomalyCenterPage />} />
-                    <Route path="/recommendations" element={<RecommendationsPage />} />
-                    <Route path="/whatif" element={<WhatIfLabPage />} />
-                    <Route path="/impact" element={<ImpactVerificationPage />} />
-                    <Route path="/data" element={<DataManagementPage />} />
-                    <Route path="/reports" element={<ReportsPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </Suspense>
-              </main>
-            </div>
-          </div>
+          <AppShell />
         </QueryClientProvider>
       </BrowserRouter>
     </ThemeProvider>

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 import joblib
 import time
 import warnings
+import importlib.util
 
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
@@ -32,17 +33,8 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import StandardScaler
 
-try:
-    import xgboost as xgb
-    HAS_XGBOOST = True
-except ImportError:
-    HAS_XGBOOST = False
-
-try:
-    import lightgbm as lgb
-    HAS_LIGHTGBM = True
-except ImportError:
-    HAS_LIGHTGBM = False
+HAS_XGBOOST = importlib.util.find_spec("xgboost") is not None
+HAS_LIGHTGBM = importlib.util.find_spec("lightgbm") is not None
 
 
 @dataclass
@@ -197,6 +189,8 @@ class EnergyPredictor:
         elif self.model_type == 'xgboost':
             if not HAS_XGBOOST:
                 raise ImportError("xgboost is not installed")
+            import xgboost as xgb
+
             self.model = xgb.XGBRegressor(
                 n_estimators=300,
                 max_depth=6,
@@ -213,6 +207,8 @@ class EnergyPredictor:
         elif self.model_type == 'lightgbm':
             if not HAS_LIGHTGBM:
                 raise ImportError("lightgbm is not installed")
+            import lightgbm as lgb
+
             self.model = lgb.LGBMRegressor(
                 n_estimators=300,
                 max_depth=6,

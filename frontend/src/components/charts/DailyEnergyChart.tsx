@@ -67,7 +67,7 @@ const DailyEnergyChart: React.FC<DailyEnergyChartProps> = ({ data, comparisonLab
     ],
   };
 
-  return <EChartsReactCore key={theme} echarts={echarts} option={option} notMerge={true} style={{ height: '400px', width: '100%' }} lazyUpdate={true} />;
+  return <EChartsReactCore key={theme} echarts={echarts} option={option} notMerge={true} style={{ height: 'clamp(260px, 44vw, 400px)', width: '100%' }} lazyUpdate={true} autoResize={true} />;
 };
 
 export default DailyEnergyChart;
