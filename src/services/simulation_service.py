@@ -5,7 +5,7 @@ and evaluates standardized Out-Of-Distribution (OOD) distance.
 """
 
 from typing import Dict, Any, List, Optional
-import numpy as np
+import math
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -75,7 +75,7 @@ class SimulationService:
         tradeoffs["cycle_time_minutes"] = round(sim_cycle_time, 2)
 
         # 3. Mechanical Power & Electrical Power
-        p_mech = target_torque * (target_speed * 2.0 * np.pi / 60.0)
+        p_mech = target_torque * (target_speed * 2.0 * math.pi / 60.0)
         p_elec = p_mech / 0.85
         sim_cutting_energy = (p_elec * (sim_cycle_time / 60.0)) / 1000.0
 

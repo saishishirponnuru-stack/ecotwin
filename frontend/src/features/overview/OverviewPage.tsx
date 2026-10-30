@@ -5,8 +5,9 @@ import { OverviewResponse } from '../../types/api';
 import { OverviewCard } from './OverviewCard';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
-import DailyEnergyChart from '../../components/charts/DailyEnergyChart';
-import MachinePerformanceChart from '../../components/charts/MachinePerformanceChart';
+
+const DailyEnergyChart = React.lazy(() => import('../../components/charts/DailyEnergyChart'));
+const MachinePerformanceChart = React.lazy(() => import('../../components/charts/MachinePerformanceChart'));
 
 export default function OverviewPage() {
   const {
@@ -107,7 +108,9 @@ if (Array.isArray(overview.daily_trend) && overview.daily_trend.length) {
 
       {/* Daily Energy Chart */}
       {dailyChartData ? (
-        <DailyEnergyChart data={dailyChartData} />
+        <React.Suspense fallback={<div role="status" className="flex h-64 items-center justify-center rounded-lg bg-gray-800 text-sm text-gray-400">Loading energy visualization…</div>}>
+          <DailyEnergyChart data={dailyChartData} />
+        </React.Suspense>
       ) : (
         <ErrorState message="No daily chart data available" onRetry={refetch} />
       )}
@@ -115,7 +118,9 @@ if (Array.isArray(overview.daily_trend) && overview.daily_trend.length) {
       {/* Machine Performance */}
       <div className="bg-gray-800 rounded-lg p-4 shadow-md">
         <h2 className="text-lg font-medium text-gray-200 mb-4">Machine Performance</h2>
-        <MachinePerformanceChart machines={machines} />
+        <React.Suspense fallback={<div role="status" className="flex h-60 items-center justify-center text-sm text-gray-400">Loading machine visualization…</div>}>
+          <MachinePerformanceChart machines={machines} />
+        </React.Suspense>
       </div>
     </div>
   );

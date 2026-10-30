@@ -19,11 +19,17 @@ class OverviewService:
         Computes high-level facility energy intelligence KPIs.
         """
         # 1. Fetch configurable constants from DB or defaults
-        grid_setting = db.query(SystemSetting).filter_by(key="grid_emission_factor").first()
-        tariff_setting = db.query(SystemSetting).filter_by(key="base_tariff_inr").first()
-        
-        emission_factor = float(grid_setting.value) if grid_setting else GRID_EMISSION_FACTOR
-        tariff_inr = float(tariff_setting.value) if tariff_setting else BASE_TARIFF_INR
+        settings = {
+            setting.key: setting.value
+            for setting in db.query(SystemSetting).filter(
+                SystemSetting.key.in_(("grid_emission_factor", "base_tariff_inr"))
+            ).all()
+        }
+
+        grid_setting = settings.get("grid_emission_factor")
+        tariff_setting = settings.get("base_tariff_inr")
+        emission_factor = float(grid_setting) if grid_setting is not None else GRID_EMISSION_FACTOR
+        tariff_inr = float(tariff_setting) if tariff_setting is not None else BASE_TARIFF_INR
 
         # 2. Aggregates across all telemetry
         telemetry_stats = db.query(
@@ -44,23 +50,37 @@ class OverviewService:
             window_str = f"{telemetry_stats.min_time.strftime('%Y-%m-%d')} to {telemetry_stats.max_time.strftime('%Y-%m-%d')}"
 
         # 3. Anomalies and Waste
-        total_anomalies = db.query(AnomalyEvent).count()
-        wasted_kwh_agg = db.query(
-            func.sum(AnomalyEvent.potential_saving_kwh)
-        ).scalar() or 0.0
-        wasted_kwh = float(wasted_kwh_agg)
+        anomaly_stats = db.query(
+            func.count(AnomalyEvent.id).label("total_anomalies"),
+            func.sum(AnomalyEvent.potential_saving_kwh).label("wasted_kwh"),
+        ).first()
+        total_anomalies = anomaly_stats.total_anomalies or 0
+        wasted_kwh = float(anomaly_stats.wasted_kwh or 0.0)
         wasted_cost = wasted_kwh * tariff_inr
 
         # 4. Fleet Summary
         fleet_items = []
         machines = db.query(Machine).all()
-        for m in machines:
-            m_stats = db.query(
+        telemetry_by_machine = {
+            row.machine_id: row
+            for row in db.query(
+                TelemetryReading.machine_id,
                 func.count(TelemetryReading.id).label("cnt"),
                 func.sum(TelemetryReading.energy_kwh).label("m_energy"),
-            ).filter(TelemetryReading.machine_id == m.id).first()
-
-            m_anom_cnt = db.query(AnomalyEvent).filter(AnomalyEvent.machine_id == m.id).count()
+            ).group_by(TelemetryReading.machine_id).all()
+        }
+        anomalies_by_machine = {
+            row.machine_id: row.anomaly_count
+            for row in db.query(
+                AnomalyEvent.machine_id,
+                func.count(AnomalyEvent.id).label("anomaly_count"),
+            ).group_by(AnomalyEvent.machine_id).all()
+        }
+        for m in machines:
+            m_stats = telemetry_by_machine.get(m.id)
+            m_count = m_stats.cnt if m_stats else 0
+            m_energy = float(m_stats.m_energy or 0.0) if m_stats else 0.0
+            m_anom_cnt = anomalies_by_machine.get(m.id, 0)
             
             # Machine degradation indicator
             dev_pct = 0.0
@@ -76,7 +96,7 @@ class OverviewService:
                 "name": m.name,
                 "status": m.status,
                 "efficiency_score": round(eff_score, 1),
-                "avg_sec": round(float(m_stats.m_energy or 0.0) / m_stats.cnt if m_stats.cnt else 0.0, 4),
+                "avg_sec": round(m_energy / m_count if m_count else 0.0, 4),
                 "total_anomalies": m_anom_cnt,
                 "avg_deviation_pct": round(dev_pct, 1),
                 "provenance_tier": "TIER_2_PHYSICALLY_DERIVED",

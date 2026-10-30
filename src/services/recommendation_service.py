@@ -48,11 +48,33 @@ class RecommendationService:
         fac_avg_sec = float(facility_stats.facility_avg_sec or 0.0)
         fac_total_energy = float(facility_stats.facility_total_energy or 0.0)
         machines = db.query(Machine).all()
+        telemetry_by_machine = {
+            row.machine_id: row
+            for row in db.query(
+                TelemetryReading.machine_id,
+                func.avg(TelemetryReading.sec_kwh_per_part).label("avg_sec"),
+                func.sum(TelemetryReading.energy_kwh).label("total_energy"),
+                func.count(TelemetryReading.id).label("reading_count"),
+            ).group_by(TelemetryReading.machine_id).all()
+        }
+        anomalies_by_machine = {
+            row.machine_id: row.anomaly_count
+            for row in db.query(
+                AnomalyEvent.machine_id,
+                func.count(AnomalyEvent.id).label("anomaly_count"),
+            ).group_by(AnomalyEvent.machine_id).all()
+        }
         recommendations: List[Dict[str, Any]] = []
         rec_id = 1
         n_machines = max(len(machines), 1)
         for m in machines:
-            stats = RecommendationService._machine_stats(db, m.id)
+            telemetry = telemetry_by_machine.get(m.id)
+            stats = {
+                "avg_sec": float(telemetry.avg_sec or 0.0) if telemetry else 0.0,
+                "total_energy": float(telemetry.total_energy or 0.0) if telemetry else 0.0,
+                "reading_count": int(telemetry.reading_count or 0) if telemetry else 0,
+                "anomaly_count": anomalies_by_machine.get(m.id, 0),
+            }
             # Rule 1: High total energy
             if fac_total_energy > 0 and stats['total_energy'] > 1.2 * (fac_total_energy / n_machines):
                 recommendations.append({

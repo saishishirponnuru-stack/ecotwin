@@ -10,7 +10,7 @@ import os
 import sys
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import sessionmaker
 
 # Add project root to sys.path
@@ -133,6 +133,62 @@ def test_api_v1_overview():
     assert data["avg_sec_kwh_per_part"] > 0
     assert len(data["fleet_summary"]) == 4
     assert len(data["daily_trend"]) >= 1
+
+
+def test_api_v1_overview_uses_bounded_select_count():
+    """Keep overview aggregation grouped instead of issuing per-machine SELECTs."""
+    select_count = 0
+
+    def count_selects(conn, cursor, statement, parameters, context, executemany):
+        nonlocal select_count
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_count += 1
+
+    event.listen(test_engine, "before_cursor_execute", count_selects)
+    try:
+        response = client.get("/api/v1/overview")
+    finally:
+        event.remove(test_engine, "before_cursor_execute", count_selects)
+
+    assert response.status_code == 200
+    assert select_count <= 7
+
+
+def _get_with_select_count(path):
+    select_count = 0
+
+    def count_selects(conn, cursor, statement, parameters, context, executemany):
+        nonlocal select_count
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_count += 1
+
+    event.listen(test_engine, "before_cursor_execute", count_selects)
+    try:
+        response = client.get(path)
+    finally:
+        event.remove(test_engine, "before_cursor_execute", count_selects)
+    return response, select_count
+
+
+def test_api_v1_energy_machine_comparison_uses_grouped_aggregates():
+    response, select_count = _get_with_select_count("/api/v1/energy/machine-comparison")
+    assert response.status_code == 200
+    assert len(response.json()) == 4
+    assert select_count <= 3
+
+
+def test_api_v1_recommendations_use_grouped_aggregates():
+    response, select_count = _get_with_select_count("/api/v1/recommendations")
+    assert response.status_code == 200
+    assert all(item["evidence_source"] for item in response.json()["recommendations"])
+    assert select_count <= 4
+
+
+def test_api_v1_energy_overview_reuses_configured_settings():
+    response, select_count = _get_with_select_count("/api/v1/energy/overview")
+    assert response.status_code == 200
+    assert "cost_inr" in response.json() and "co2_tonnes" in response.json()
+    assert select_count <= 7
 
 
 def test_api_v1_machines_list_and_detail():
