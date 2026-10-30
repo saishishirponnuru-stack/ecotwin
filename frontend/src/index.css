@@ -67,6 +67,17 @@ body {
 .app-sidebar .bg-gray-700 { background-color: #334155; }
 .app-header { background-color: var(--header-bg); color: var(--header-text); }
 .app-main { width: 100%; min-width: 0; overflow-x: hidden; }
+.sidebar-brand-logo {
+  display: block;
+  width: 188px;
+  height: 70px;
+  flex: 0 1 188px;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  background: #0b0f19;
+  padding: 3px 7px;
+}
+.mobile-brand { display: none; }
 .mobile-menu-button,
 .sidebar-close { display: none; }
 
@@ -76,6 +87,26 @@ body {
 
 @media (max-width: 767px) {
   .app-header { flex: 0 0 4rem; }
+  .mobile-brand {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--header-text);
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .mobile-brand img {
+    display: block;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    object-fit: contain;
+    border-radius: 0.6rem;
+    background: #0b0f19;
+    padding: 2px;
+  }
   .mobile-menu-button,
   .sidebar-close {
     display: inline-flex;

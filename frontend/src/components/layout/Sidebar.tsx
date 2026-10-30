@@ -32,8 +32,12 @@ export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
         inert={isMobile && !open ? true : undefined}
         className={`app-sidebar w-64 bg-gray-800 text-gray-100 flex flex-col p-4 ${open ? 'is-open' : ''}`}
       >
-        <div className="mb-6 flex items-center justify-between text-xl font-semibold text-teal-300">
-          <span>EcoTwin</span>
+        <div className="mb-6 flex items-center justify-between">
+          <img
+            className="sidebar-brand-logo"
+            src="/ecotwin-logo.webp"
+            alt="EcoTwin — Smart Manufacturing Energy Intelligence"
+          />
           <button type="button" className="sidebar-close" aria-label="Close navigation menu" onClick={onClose}>
             <span aria-hidden="true">×</span>
           </button>

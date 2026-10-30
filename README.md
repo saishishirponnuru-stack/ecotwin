@@ -1,5 +1,7 @@
 # EcoTwin
 
+<p align="center"><img src="frontend/public/ecotwin-logo.png" alt="EcoTwin Smart Manufacturing Energy Intelligence" width="720" /></p>
+
 EcoTwin is a local smart-manufacturing energy and process-optimization demonstration application. It combines a React dashboard with a FastAPI service, SQLite-backed machine and telemetry records, deterministic energy calculations, a saved prediction artifact, anomaly views, and scenario simulations.
 
 > **Scope and evidence:** This repository is a demonstration and engineering prototype. Its included manufacturing records contain benchmark inputs, physically derived energy values, and synthetic factory context. It does not establish a deployed customer installation, site-metered energy performance, verified savings, or independently verified emissions reductions.

@@ -20,7 +20,11 @@ export default function Header({ title, menuOpen, onMenuClick }: HeaderProps) {
       >
         {menuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
       </button>
-      <h1 className="min-w-0 truncate text-base font-semibold sm:text-lg lg:text-2xl">{title}</h1>
+      <div className="mobile-brand" aria-label="EcoTwin">
+        <img src="/ecotwin-mark-64.png" alt="" />
+        <span>EcoTwin</span>
+      </div>
+      <h1 className="hidden min-w-0 truncate text-base font-semibold sm:block sm:text-lg lg:text-2xl">{title}</h1>
     </header>
   );
 }
